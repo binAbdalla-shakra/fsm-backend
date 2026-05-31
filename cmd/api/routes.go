@@ -1,0 +1,52 @@
+package main
+
+import (
+	"fsm-backend/internal/middleware"
+
+	"github.com/gofiber/contrib/websocket"
+	"github.com/gofiber/fiber/v2"
+)
+
+// RegisterRoutes maps application routes using the dependencies wrapper.
+func RegisterRoutes(app *fiber.App, deps *AppDependencies) {
+	api := app.Group("/api/v1")
+
+	// 1. Auth endpoints (Public)
+	api.Post("/auth/signup", deps.AuthHandler.SignUp)
+	api.Post("/auth/login", deps.AuthHandler.RequestOTP)
+	api.Post("/auth/otp/verify", deps.AuthHandler.VerifyOTP)
+	api.Post("/auth/refresh", deps.AuthHandler.Refresh)
+
+	// Auth endpoints (Protected)
+	authMiddleware := middleware.AuthRequired(deps.Config, deps.SessionRepository)
+	api.Post("/auth/logout", authMiddleware, deps.AuthHandler.Logout)
+
+	// 2. Customer resource endpoints (Protected)
+	api.Get("/customers/:id", authMiddleware, deps.CustomerHandler.GetByID)
+
+	// 3. Technician resource endpoints (Protected or Public for demo registration)
+	api.Post("/technicians", deps.TechnicianHandler.Register)
+	api.Get("/technicians/:id", authMiddleware, deps.TechnicianHandler.GetByID)
+	api.Put("/technicians/:id/status", authMiddleware, deps.TechnicianHandler.UpdateStatus)
+
+	// 4. Ticket resource endpoints (Protected)
+	api.Post("/tickets", authMiddleware, middleware.HasPermission("ticket:create"), deps.TicketHandler.Report)
+	api.Get("/tickets/:id", authMiddleware, deps.TicketHandler.GetByID)
+	api.Post("/tickets/:id/dispatch", authMiddleware, middleware.HasPermission("ticket:dispatch"), deps.TicketHandler.AutoDispatch)
+	api.Post("/tickets/:id/start", authMiddleware, middleware.HasPermission("ticket:update"), deps.TicketHandler.Start)
+	api.Post("/tickets/:id/complete", authMiddleware, middleware.HasPermission("ticket:update"), deps.TicketHandler.Complete)
+
+	// 5. WebSockets Telemetry Routes
+	app.Use("/ws", func(c *fiber.Ctx) error {
+		if websocket.IsWebSocketUpgrade(c) {
+			c.Locals("allowed", true)
+			return c.Next()
+		}
+		return fiber.ErrUpgradeRequired
+	})
+
+	// Upgrades technician connection to push GPS updates
+	app.Get("/ws/tracking/tech/:tech_id", websocket.New(deps.TrackingHandler.TechTelemetryWS))
+	// Upgrades customer connection to receive live technician route tracking
+	app.Get("/ws/tracking/customer/:ticket_id", websocket.New(deps.TrackingHandler.CustomerTrackWS))
+}

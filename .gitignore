@@ -1,0 +1,51 @@
+# Go Binaries and Executables
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+fsm-api.exe
+tmp_build.exe
+
+# Test binaries
+*.test
+*.out
+
+# Dependency management
+# vendor/
+
+# Local Environment Variables and Secrets
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+.env.staging
+
+# IDEs and Editors
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.project
+.classpath
+.settings/
+
+# Operating System Files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+.Spotlight-V100
+.Trashes
+
+# Temp files and build folders
+/tmp/
+/bin/
+/dist/
+/out/
+/build/
+air_session.json

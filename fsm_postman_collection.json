@@ -1,0 +1,658 @@
+{
+  "info": {
+    "_postman_id": "f5d0234a-9524-4f24-912f-db40733d1c1a",
+    "name": "Field Service Management (FSM) API Collection",
+    "description": "API Collection for FSM (Field Service Management) - Single Tenant App-to-App Ticketing Backend.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Signup Customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Device-ID",
+                "value": "postman_device_001"
+              },
+              {
+                "key": "X-Device-Name",
+                "value": "Postman Desktop"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+252615550100\",\n  \"email\": \"customer@hormuud.com\",\n  \"name\": \"Hassan Ali\",\n  \"account_number\": \"AC-98124\",\n  \"address\": \"Maka Al Mukarama Road, Mogadishu\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/signup",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "signup"
+              ]
+            },
+            "description": "Initializes a customer signup. Immediately generates and sends a mock SMS verification OTP via Hormuud SMS API."
+          }
+        },
+        {
+          "name": "Login (Request OTP)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+252615550100\",\n  \"action_type\": \"LOGIN\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Sends a verification OTP for login authentication stage. ActionType should be 'LOGIN'."
+          }
+        },
+        {
+          "name": "Verify OTP & Obtain JWT",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.success && res.data) {",
+                  "    pm.collectionVariables.set(\"access_token\", res.data.access_token);",
+                  "    pm.collectionVariables.set(\"refresh_token\", res.data.refresh_token);",
+                  "    console.log(\"Saved tokens to collection variables successfully.\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Device-ID",
+                "value": "postman_device_001"
+              },
+              {
+                "key": "X-Device-Name",
+                "value": "Postman Desktop"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+252615550100\",\n  \"code\": \"4321\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/otp/verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "otp",
+                "verify"
+              ]
+            },
+            "description": "Submits the numeric verification OTP. On success, returns access/refresh JWT tokens, which are automatically cached by the Postman collection script."
+          }
+        },
+        {
+          "name": "Refresh Session Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.success && res.data) {",
+                  "    pm.collectionVariables.set(\"access_token\", res.data.access_token);",
+                  "    pm.collectionVariables.set(\"refresh_token\", res.data.refresh_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Device-ID",
+                "value": "postman_device_001"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Performs Refresh Token Rotation (RTR) to retrieve a new Access Token and new rotated Refresh Token using the cached Refresh Token."
+          }
+        },
+        {
+          "name": "Logout Session",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Device-ID",
+                "value": "postman_device_001"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Revokes the active device session from the database. Requires Bearer authorization and X-Device-ID header."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "item": [
+        {
+          "name": "Get Customer Profile",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/customers/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "paste_customer_uuid_here"
+                }
+              ]
+            },
+            "description": "Fetches details of a customer profile. Requires Bearer JWT."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Technicians",
+      "item": [
+        {
+          "name": "Register Technician",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+252616660200\",\n  \"email\": \"technician@hormuud.com\",\n  \"name\": \"Abdi Farah\",\n  \"skills\": [\"Fiber Optic\", \"Router Setup\", \"General Troubleshooting\"],\n  \"zone_assignment\": \"Waberi\",\n  \"latitude\": 2.0396,\n  \"longitude\": 45.3182\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/technicians",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "technicians"
+              ]
+            },
+            "description": "Creates a new core user with role 'TECHNICIAN' and builds their technician profile. The coordinates register their initial GPS coordinates in Mogadishu (SRID 4326)."
+          }
+        },
+        {
+          "name": "Get Technician Profile",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/technicians/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "technicians",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "paste_technician_uuid_here"
+                }
+              ]
+            },
+            "description": "Retrieves profiles, active status, completes task counters, and ratings of a technician."
+          }
+        },
+        {
+          "name": "Update Technician Status/Location",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ONLINE\",\n  \"latitude\": 2.0396,\n  \"longitude\": 45.3182\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/technicians/:id/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "technicians",
+                ":id",
+                "status"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "paste_technician_uuid_here"
+                }
+              ]
+            },
+            "description": "Updates the technician status ('ONLINE', 'OFFLINE') and registers their current coordinate pin. Needed for proximity auto-dispatching."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tickets",
+      "item": [
+        {
+          "name": "Report Ticket",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Complete Fiber Link Outage\",\n  \"description\": \"Broadband red alarm lamp is flashing. I checked local router cabling.\",\n  \"skill_required\": \"Fiber Optic\",\n  \"landmark\": \"Opposite Shamo Hotel\",\n  \"latitude\": 2.0378,\n  \"longitude\": 45.3150\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/tickets",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tickets"
+              ]
+            },
+            "description": "Reports a connection issue. Requires Bearer JWT with `ticket:create` permission. Immediately triggers proximity-based matching routines."
+          }
+        },
+        {
+          "name": "Get Ticket Details",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/tickets/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tickets",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "paste_ticket_uuid_here"
+                }
+              ]
+            },
+            "description": "Fetches state, category, assigned technician ID, and completion OTP verification code of a ticket."
+          }
+        },
+        {
+          "name": "Proximity Auto-Dispatch",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/tickets/:id/dispatch",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tickets",
+                ":id",
+                "dispatch"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "paste_ticket_uuid_here"
+                }
+              ]
+            },
+            "description": "Matches coordinates of the reported ticket to the closest 'ONLINE' technician with 0 workload and matching skills within 50km. Requires `ticket:dispatch` permission."
+          }
+        },
+        {
+          "name": "Start Work (Before Photo)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Device-ID",
+                "value": "postman_device_001"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "before_photo",
+                  "description": "Arrived state photo (optional upload)",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/tickets/:id/start",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tickets",
+                ":id",
+                "start"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "paste_ticket_uuid_here"
+                }
+              ]
+            },
+            "description": "Transitions ticket status to 'IN_PROGRESS'. The technician uploads their arrival proof photo. Requires Bearer JWT of assigned technician (`ticket:update` permission)."
+          }
+        },
+        {
+          "name": "Complete Work (After Photo & Customer OTP)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Device-ID",
+                "value": "postman_device_001"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "otp",
+                  "value": "123456",
+                  "description": "4-to-6 digit customer completion verification code",
+                  "type": "text"
+                },
+                {
+                  "key": "after_photo",
+                  "description": "Resolution state photo (optional upload)",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/tickets/:id/complete",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tickets",
+                ":id",
+                "complete"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "paste_ticket_uuid_here"
+                }
+              ]
+            },
+            "description": "Submits work resolution details. Verifies the OTP matching the customer's secret code. Closes the ticket state to 'COMPLETED'. Requires `ticket:update` permission."
+          }
+        }
+      ]
+    },
+    {
+      "name": "WebSockets GPS Tracking",
+      "item": [
+        {
+          "name": "Technician Live Telemetry",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "ws://localhost:8080/ws/tracking/tech/:tech_id?ticket_id=paste_ticket_uuid_here",
+              "protocol": "ws",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "ws",
+                "tracking",
+                "tech",
+                ":tech_id"
+              ],
+              "query": [
+                {
+                  "key": "ticket_id",
+                  "value": "paste_ticket_uuid_here"
+                }
+              ],
+              "variable": [
+                {
+                  "key": "tech_id",
+                  "value": "paste_technician_uuid_here"
+                }
+              ]
+            },
+            "description": "WebSocket URL. Technician uploads GPS pings formatted as raw JSON: `{\"latitude\": 2.0396, \"longitude\": 45.3182, \"speed\": 4.2, \"bearing\": 120.0}`. Updates Redis caching and streams coordinates to subscribers."
+          }
+        },
+        {
+          "name": "Customer Tracking Subscriber",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "ws://localhost:8080/ws/tracking/customer/:ticket_id",
+              "protocol": "ws",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "ws",
+                "tracking",
+                "customer",
+                ":ticket_id"
+              ],
+              "variable": [
+                {
+                  "key": "ticket_id",
+                  "value": "paste_ticket_uuid_here"
+                }
+              ]
+            },
+            "description": "WebSocket URL. Upgrades customer connection. Broadcasts real-time technician routes, current speed, and heading telemetry straight to the client screen."
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
