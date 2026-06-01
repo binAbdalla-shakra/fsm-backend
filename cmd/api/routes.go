@@ -5,10 +5,19 @@ import (
 
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/swagger"
 )
 
 // RegisterRoutes maps application routes using the dependencies wrapper.
 func RegisterRoutes(app *fiber.App, deps *AppDependencies) {
+	// Serve static docs directory for swagger spec
+	app.Static("/docs", "./docs")
+
+	// Mount Swagger UI
+	app.Get("/swagger/*", swagger.New(swagger.Config{
+		URL: "/docs/swagger.json",
+	}))
+
 	api := app.Group("/api/v1")
 
 	// 1. Auth endpoints (Public)
