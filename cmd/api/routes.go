@@ -5,10 +5,19 @@ import (
 
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/swagger"
 )
 
 // RegisterRoutes maps application routes using the dependencies wrapper.
 func RegisterRoutes(app *fiber.App, deps *AppDependencies) {
+	// Serve static docs directory for swagger spec
+	app.Static("/docs", "./docs")
+
+	// Mount Swagger UI
+	app.Get("/swagger/*", swagger.New(swagger.Config{
+		URL: "/docs/swagger.json",
+	}))
+
 	api := app.Group("/api/v1")
 
 	// 1. Auth endpoints (Public)
@@ -22,19 +31,23 @@ func RegisterRoutes(app *fiber.App, deps *AppDependencies) {
 	api.Post("/auth/logout", authMiddleware, deps.AuthHandler.Logout)
 
 	// 2. Customer resource endpoints (Protected)
-	api.Get("/customers/:id", authMiddleware, deps.CustomerHandler.GetByID)
+	api.Get("/customers/profile", authMiddleware, deps.CustomerHandler.GetMe)
+	api.Get("/customers/tickets", authMiddleware, deps.TicketHandler.GetByCustomer)
 
 	// 3. Technician resource endpoints (Protected or Public for demo registration)
 	api.Post("/technicians", deps.TechnicianHandler.Register)
-	api.Get("/technicians/:id", authMiddleware, deps.TechnicianHandler.GetByID)
-	api.Put("/technicians/:id/status", authMiddleware, deps.TechnicianHandler.UpdateStatus)
+	api.Get("/technicians/profile", authMiddleware, deps.TechnicianHandler.GetMe)
+	api.Put("/technicians/status", authMiddleware, deps.TechnicianHandler.UpdateStatus)
+	api.Get("/technicians/tickets", authMiddleware, deps.TicketHandler.GetByTechnician)
 
 	// 4. Ticket resource endpoints (Protected)
-	api.Post("/tickets", authMiddleware, middleware.HasPermission("ticket:create"), deps.TicketHandler.Report)
+	api.Post("/tickets", authMiddleware, deps.TicketHandler.Report)
 	api.Get("/tickets/:id", authMiddleware, deps.TicketHandler.GetByID)
-	api.Post("/tickets/:id/dispatch", authMiddleware, middleware.HasPermission("ticket:dispatch"), deps.TicketHandler.AutoDispatch)
-	api.Post("/tickets/:id/start", authMiddleware, middleware.HasPermission("ticket:update"), deps.TicketHandler.Start)
-	api.Post("/tickets/:id/complete", authMiddleware, middleware.HasPermission("ticket:update"), deps.TicketHandler.Complete)
+	api.Post("/tickets/:id/dispatch", authMiddleware, deps.TicketHandler.AutoDispatch)
+	api.Post("/tickets/:id/assign", authMiddleware, deps.TicketHandler.DirectAssign)
+	api.Post("/tickets/:id/start", authMiddleware, deps.TicketHandler.Start)
+	api.Post("/tickets/:id/complete", authMiddleware, deps.TicketHandler.Complete)
+	api.Post("/tickets/:id/review", authMiddleware, deps.TicketHandler.Review)
 
 	// 5. WebSockets Telemetry Routes
 	app.Use("/ws", func(c *fiber.Ctx) error {

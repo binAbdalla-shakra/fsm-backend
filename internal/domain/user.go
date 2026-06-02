@@ -35,34 +35,49 @@ type Permission struct {
 	GroupName   string `json:"group_name"`
 }
 
+type CustomerStats struct {
+	TotalTickets     int `json:"total_tickets"`
+	ActiveTickets    int `json:"active_tickets"`
+	CompletedTickets int `json:"completed_tickets"`
+}
+
 type Customer struct {
-	ID            string     `json:"id"`
-	UserID        string     `json:"user_id"`
-	AccountNumber string     `json:"account_number"`
-	PlanType      string     `json:"plan_type"`
-	CurrentSpeed  string     `json:"current_speed"`
-	Address       *string    `json:"address,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
-	User          *User      `json:"user,omitempty"`
+	ID            string         `json:"id"`
+	UserID        string         `json:"user_id"`
+	AccountNumber string         `json:"account_number"`
+	PlanType      string         `json:"plan_type"`
+	CurrentSpeed  string         `json:"current_speed"`
+	Address       *string        `json:"address,omitempty"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+	User          *User          `json:"user,omitempty"`
+	Stats         *CustomerStats `json:"stats,omitempty"`
+}
+
+type TechnicianStats struct {
+	TotalAssigned    int     `json:"total_assigned"`
+	ActiveTickets    int     `json:"active_tickets"`
+	CompletedTickets int     `json:"completed_tickets"`
+	AverageRating    float64 `json:"average_rating"`
 }
 
 type Technician struct {
-	ID             string     `json:"id"`
-	UserID         string     `json:"user_id"`
-	Status         string     `json:"status"`
-	Workload       int        `json:"workload"`
-	Skills         []string   `json:"skills"`
-	Latitude       float64    `json:"latitude"`
-	Longitude      float64    `json:"longitude"`
-	ZoneAssignment *string    `json:"zone_assignment,omitempty"`
-	Rating         float64    `json:"rating"`
-	TasksCompleted int        `json:"tasks_completed"`
-	ShiftStart     *string    `json:"shift_start,omitempty"`
-	ShiftEnd       *string    `json:"shift_end,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
-	User           *User      `json:"user,omitempty"`
+	ID             string           `json:"id"`
+	UserID         string           `json:"user_id"`
+	Status         string           `json:"status"`
+	Workload       int              `json:"workload"`
+	Skills         []string         `json:"skills"`
+	Latitude       float64          `json:"latitude"`
+	Longitude      float64          `json:"longitude"`
+	ZoneAssignment *string          `json:"zone_assignment,omitempty"`
+	Rating         float64          `json:"rating"`
+	TasksCompleted int              `json:"tasks_completed"`
+	ShiftStart     *string          `json:"shift_start,omitempty"`
+	ShiftEnd       *string          `json:"shift_end,omitempty"`
+	CreatedAt      time.Time        `json:"created_at"`
+	UpdatedAt      time.Time        `json:"updated_at"`
+	User           *User            `json:"user,omitempty"`
+	Stats          *TechnicianStats `json:"stats,omitempty"`
 }
 
 type UserSession struct {
@@ -91,6 +106,7 @@ type CustomerRepository interface {
 	GetByID(ctx context.Context, id string) (*Customer, error)
 	GetByUserID(ctx context.Context, userID string) (*Customer, error)
 	GetByAccountNumber(ctx context.Context, accNum string) (*Customer, error)
+	GetStats(ctx context.Context, customerID string) (*CustomerStats, error)
 }
 
 type TechnicianRepository interface {
@@ -100,4 +116,5 @@ type TechnicianRepository interface {
 	UpdateStatusAndLocation(ctx context.Context, id string, status string, lat float64, lon float64) error
 	UpdateWorkload(ctx context.Context, id string, change int) error
 	FindNearestMatching(ctx context.Context, lon float64, lat float64, skill string, maxDistance float64) ([]*Technician, []float64, error)
+	GetStats(ctx context.Context, technicianID string) (*TechnicianStats, error)
 }

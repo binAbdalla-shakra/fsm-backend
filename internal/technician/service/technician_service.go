@@ -10,6 +10,7 @@ import (
 type TechnicianService interface {
 	RegisterTechnician(ctx context.Context, u *domain.User, skills []string, zone *string, lat, lon float64) (*domain.Technician, error)
 	GetByID(ctx context.Context, id string) (*domain.Technician, error)
+	GetByUserID(ctx context.Context, userID string) (*domain.Technician, error)
 	UpdateStatus(ctx context.Context, id string, status string, lat, lon float64) error
 }
 
@@ -73,6 +74,13 @@ func (s *technicianService) GetByID(ctx context.Context, id string) (*domain.Tec
 	if err == nil {
 		tech.User = u
 	}
+
+	// Fetch and populate stats
+	stats, err := s.techRepo.GetStats(ctx, tech.ID)
+	if err == nil {
+		tech.Stats = stats
+	}
+
 	return tech, nil
 }
 
@@ -87,4 +95,31 @@ func (s *technicianService) UpdateStatus(ctx context.Context, id string, status 
 	}
 
 	return s.techRepo.UpdateStatusAndLocation(ctx, id, status, lat, lon)
+}
+
+func (s *technicianService) GetByUserID(ctx context.Context, userID string) (*domain.Technician, error) {
+	if userID == "" {
+		return nil, exceptions.NewBadRequestError("User ID is required", "INVALID_USER_ID")
+	}
+
+	tech, err := s.techRepo.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, exceptions.NewInternalServerError(err.Error())
+	}
+	if tech == nil {
+		return nil, exceptions.NewNotFoundError("Technician profile not found", "TECHNICIAN_NOT_FOUND")
+	}
+
+	u, err := s.userRepo.GetByID(ctx, userID)
+	if err == nil {
+		tech.User = u
+	}
+
+	// Fetch and populate stats
+	stats, err := s.techRepo.GetStats(ctx, tech.ID)
+	if err == nil {
+		tech.Stats = stats
+	}
+
+	return tech, nil
 }

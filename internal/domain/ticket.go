@@ -65,6 +65,8 @@ type TicketRepository interface {
 	SubmitReview(ctx context.Context, ticketID string, rating int, tags []string, comment string) error
 	LogProgress(ctx context.Context, log *TicketLog) error
 	GetProgressLogs(ctx context.Context, ticketID string) ([]*TicketLog, error)
+	GetByTechnicianID(ctx context.Context, techID string, statusFilter string) ([]*Ticket, error)
+	GetByCustomerID(ctx context.Context, custID string, statusFilter string) ([]*Ticket, error)
 }
 
 type AuditRepository interface {

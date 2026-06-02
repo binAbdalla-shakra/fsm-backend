@@ -139,3 +139,70 @@ func (h *TicketHandler) GetByID(c *fiber.Ctx) error {
 
 	return response.SendSuccess(c, fiber.StatusOK, "Ticket retrieved successfully", res)
 }
+
+func (h *TicketHandler) DirectAssign(c *fiber.Ctx) error {
+	id := c.Params("id")
+	var req struct {
+		TechnicianID string `json:"technician_id"`
+	}
+	if err := c.BodyParser(&req); err != nil || req.TechnicianID == "" {
+		return exceptions.NewBadRequestError(messages.ErrInvalidPayload, "INVALID_PAYLOAD")
+	}
+
+	err := h.service.DirectAssign(c.UserContext(), id, req.TechnicianID)
+	if err != nil {
+		return err
+	}
+
+	return response.SendSuccess(c, fiber.StatusOK, "Ticket assigned directly to technician successfully.", nil)
+}
+
+func (h *TicketHandler) GetByTechnician(c *fiber.Ctx) error {
+	userIDVal := c.Locals("userID")
+	if userIDVal == nil {
+		return exceptions.NewBadRequestError("Unauthorized", "UNAUTHORIZED")
+	}
+	userID := userIDVal.(string)
+	statusFilter := c.Query("status")
+
+	res, err := h.service.GetTicketsByTechnicianUser(c.UserContext(), userID, statusFilter)
+	if err != nil {
+		return err
+	}
+
+	return response.SendSuccess(c, fiber.StatusOK, "Technician tickets retrieved successfully.", res)
+}
+
+func (h *TicketHandler) GetByCustomer(c *fiber.Ctx) error {
+	userIDVal := c.Locals("userID")
+	if userIDVal == nil {
+		return exceptions.NewBadRequestError("Unauthorized", "UNAUTHORIZED")
+	}
+	userID := userIDVal.(string)
+
+	res, err := h.service.GetTicketsByCustomerUser(c.UserContext(), userID)
+	if err != nil {
+		return err
+	}
+
+	return response.SendSuccess(c, fiber.StatusOK, "Customer tickets retrieved successfully.", res)
+}
+
+func (h *TicketHandler) Review(c *fiber.Ctx) error {
+	id := c.Params("id")
+	var req struct {
+		Rating  int      `json:"rating"`
+		Tags    []string `json:"tags"`
+		Comment string   `json:"comment"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return exceptions.NewBadRequestError(messages.ErrInvalidPayload, "INVALID_PAYLOAD")
+	}
+
+	err := h.service.SubmitFeedback(c.UserContext(), id, req.Rating, req.Tags, req.Comment)
+	if err != nil {
+		return err
+	}
+
+	return response.SendSuccess(c, fiber.StatusOK, "Ticket review submitted successfully. Technician rating updated.", nil)
+}

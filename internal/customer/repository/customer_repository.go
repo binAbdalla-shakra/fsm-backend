@@ -106,3 +106,20 @@ func (r *customerRepository) GetByAccountNumber(ctx context.Context, accNum stri
 	}
 	return &c, nil
 }
+
+func (r *customerRepository) GetStats(ctx context.Context, customerID string) (*domain.CustomerStats, error) {
+	query := `
+		SELECT 
+			COUNT(*)::integer AS total,
+			COUNT(*) FILTER (WHERE status != 'COMPLETED')::integer AS active,
+			COUNT(*) FILTER (WHERE status = 'COMPLETED')::integer AS completed
+		FROM tickets
+		WHERE customer_id = $1 AND deleted_at IS NULL
+	`
+	var stats domain.CustomerStats
+	err := r.db.QueryRow(ctx, query, customerID).Scan(&stats.TotalTickets, &stats.ActiveTickets, &stats.CompletedTickets)
+	if err != nil {
+		return nil, err
+	}
+	return &stats, nil
+}

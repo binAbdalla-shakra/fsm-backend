@@ -26,6 +26,14 @@ func FiberErrorHandler(c *fiber.Ctx, err error) error {
 		code = appErr.Status
 		message = appErr.Message
 		errCode = appErr.Code
+	} else if fibErr, ok := err.(*fiber.Error); ok {
+		code = fibErr.Code
+		message = fibErr.Message
+		if code == fiber.StatusNotFound {
+			errCode = "ROUTE_NOT_FOUND"
+		} else {
+			errCode = "HTTP_ERROR"
+		}
 	}
 
 	return c.Status(code).JSON(response.APIResponse{

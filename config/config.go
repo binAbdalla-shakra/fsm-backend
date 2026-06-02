@@ -18,7 +18,7 @@ func LoadConfig() *Config {
 
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
-		databaseURL = "postgres://postgres:postgres@localhost:5432/fsm?sslmode=disable"
+		databaseURL = "postgres://postgres:123@localhost:5432/fsm?sslmode=disable"
 	}
 
 	redisURL := os.Getenv("REDIS_URL")

@@ -1,0 +1,666 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Field Service Management (FSM) API",
+    "description": "Production-ready, reusable single-tenant backend API for Hormuud Telecom and other enterprises. Outlines authentication workflows (OTP, Session Management, RTR), PostGIS proximity operations, technician telemetry, and tickets lifecycle.",
+    "version": "1.3.0",
+    "contact": {
+      "name": "FSM Engineering Team",
+      "email": "engineering@hormuud.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080/api/v1",
+      "description": "Local Development Server"
+    }
+  ],
+  "paths": {
+    "/auth/signup": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Customer Signup",
+        "description": "Registers a new customer user and immediately dispatches a verification SMS via Hormuud SMS API.",
+        "parameters": [
+          {
+            "name": "X-Device-ID",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Unique device hardware identifier"
+          },
+          {
+            "name": "X-Device-Name",
+            "in": "header",
+            "schema": { "type": "string" },
+            "description": "Readable device model or browser name"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignUpPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "211": {
+            "description": "Signup initiated, SMS OTP sent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIResponseSuccess"
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid body or missing fields" },
+          "409": { "description": "User or phone number already registered" }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Request Login OTP",
+        "description": "Dispatches a login verification code via SMS to the provided phone number.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendOTPRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "OTP sent successfully" },
+          "400": { "description": "Invalid phone number format" }
+        }
+      }
+    },
+    "/auth/otp/verify": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Verify OTP and Login",
+        "description": "Verifies the SMS code. On success, issues a JWT Access Token and maps a new device session with a Refresh Token.",
+        "parameters": [
+          {
+            "name": "X-Device-ID",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Device-Name",
+            "in": "header",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyOTPPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authentication successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/APIResponse" },
+                    {
+                      "properties": {
+                        "data": { "$ref": "#/components/schemas/TokenResponse" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "description": "Invalid or expired OTP code" }
+        }
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Refresh Session Tokens",
+        "description": "Performs Refresh Token Rotation (RTR) to issue a new Access Token and rotated Refresh Token.",
+        "parameters": [
+          {
+            "name": "X-Device-ID",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["refresh_token"],
+                "properties": {
+                  "refresh_token": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Token rotated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/TokenResponse" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Refresh token is expired or reuse detected" }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Logout session",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "X-Device-ID",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Session deleted successfully" },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    },
+    "/customers/profile": {
+      "get": {
+        "tags": ["Customers"],
+        "summary": "Get Customer Profile",
+        "description": "Fetches details of the customer profile matching the bearer token, including reported ticket statistics.",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Profile details retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerProfileResponse"
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    },
+    "/customers/tickets": {
+      "get": {
+        "tags": ["Customers"],
+        "summary": "Get Customer Reported Tickets",
+        "description": "Lists all tickets submitted by the customer resolved from their token.",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Customer tickets list" }
+        }
+      }
+    },
+    "/technicians": {
+      "post": {
+        "tags": ["Technicians"],
+        "summary": "Register Technician",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterTechRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Technician created successfully" },
+          "409": { "description": "Phone number already exists" }
+        }
+      }
+    },
+    "/technicians/profile": {
+      "get": {
+        "tags": ["Technicians"],
+        "summary": "Get Technician Details",
+        "description": "Retrieves profiles, workload status, and service performance stats of the logged-in technician resolved from their token.",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Technician details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TechnicianProfileResponse"
+                }
+              }
+            }
+          },
+          "404": { "description": "Technician not found" }
+        }
+      }
+    },
+    "/technicians/status": {
+      "put": {
+        "tags": ["Technicians"],
+        "summary": "Update Status and Coordinates",
+        "description": "Updates status and coordinate location pins for the logged-in technician matching their token.",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateStatusRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Status and GPS updated" },
+          "400": { "description": "Invalid coordinates or status code" }
+        }
+      }
+    },
+    "/technicians/tickets": {
+      "get": {
+        "tags": ["Technicians"],
+        "summary": "Get Technician Assigned Tickets",
+        "description": "Lists all tickets assigned to the logged-in technician matching their token. Supports status filtering.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Filter tickets by status (e.g., COMPLETED, IN_PROGRESS)"
+          }
+        ],
+        "responses": {
+          "200": { "description": "List of assigned tickets" }
+        }
+      }
+    },
+    "/tickets": {
+      "post": {
+        "tags": ["Tickets"],
+        "summary": "Report New Issue",
+        "description": "Reports a new connection issue with landmark and coordinate geometry, automatically running proximity checks. Requires Bearer JWT.",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTicketRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Ticket reported & Auto-Dispatched successfully" },
+          "400": { "description": "Missing coordinates or parameters" }
+        }
+      }
+    },
+    "/tickets/{id}": {
+      "get": {
+        "tags": ["Tickets"],
+        "summary": "Get Ticket Info",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Detailed ticket details" }
+        }
+      }
+    },
+    "/tickets/{id}/dispatch": {
+      "post": {
+        "tags": ["Tickets"],
+        "summary": "Auto-Dispatch Nearest Technician",
+        "description": "Finds the nearest ONLINE technician with 0 current workload and matching skills within 50km using PostGIS. Requires Bearer JWT.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Technician assigned successfully" },
+          "404": { "description": "No available technicians found within radius" }
+        }
+      }
+    },
+    "/tickets/{id}/assign": {
+      "post": {
+        "tags": ["Tickets"],
+        "summary": "Direct Ticket Assignment",
+        "description": "Bypasses the proximity search, assigning the ticket directly to the technician ID. Accepts either Ticket UUID or Ticket Reference number (e.g. TK-12345) as parameters. Requires Bearer JWT.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Ticket UUID or Ticket reference code (e.g., TK-48291)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["technician_id"],
+                "properties": {
+                  "technician_id": { "type": "string", "format": "uuid" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Technician assigned directly successfully" },
+          "404": { "description": "Technician or Ticket reference not found" }
+        }
+      }
+    },
+    "/tickets/{id}/start": {
+      "post": {
+        "tags": ["Tickets"],
+        "summary": "Start Ticket Work",
+        "description": "Transitions ticket status to 'IN_PROGRESS'. The technician uploads arrival verification proof before work. Requires Bearer JWT.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "before_photo": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Before work arrival proof picture file"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Work started" }
+        }
+      }
+    },
+    "/tickets/{id}/complete": {
+      "post": {
+        "tags": ["Tickets"],
+        "summary": "Complete Ticket Work",
+        "description": "Closes the ticket status to 'COMPLETED'. The technician submits resolution notes, resolution proof photo, and verifies the 4-digit code matching the customer's OTP. Requires Bearer JWT.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["otp"],
+                "properties": {
+                  "otp": {
+                    "type": "string",
+                    "description": "Customer verification code"
+                  },
+                  "after_photo": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Resolution photo proof"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Ticket completed successfully" },
+          "400": { "description": "Invalid OTP code" }
+        }
+      }
+    },
+    "/tickets/{id}/review": {
+      "post": {
+        "tags": ["Tickets"],
+        "summary": "Review Work Performance",
+        "description": "Allows customers to rate their experience. Automatically updates the technician's global profile rating score inside the database. Requires Bearer JWT.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["rating"],
+                "properties": {
+                  "rating": { "type": "integer", "minimum": 1, "maximum": 5, "example": 5 },
+                  "tags": { "type": "array", "items": { "type": "string" }, "example": ["Fast", "Polite"] },
+                  "comment": { "type": "string", "example": "Abdi resolved our link alignment very quickly!" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Feedback registered, technician rating recalculated" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "APIResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "message": { "type": "string" },
+          "code": { "type": "string" }
+        }
+      },
+      "APIResponseSuccess": {
+        "allOf": [
+          { "$ref": "#/components/schemas/APIResponse" },
+          {
+            "properties": {
+              "success": { "type": "boolean", "example": true }
+            }
+          }
+        ]
+      },
+      "SignUpPayload": {
+        "type": "object",
+        "required": ["phone", "name", "account_number"],
+        "properties": {
+          "phone": { "type": "string", "example": "+252615550100" },
+          "email": { "type": "string", "example": "customer@hormuud.com" },
+          "name": { "type": "string", "example": "Hassan Ali" },
+          "account_number": { "type": "string", "example": "AC-98124" },
+          "address": { "type": "string", "example": "Maka Al Mukarama, Mogadishu" }
+        }
+      },
+      "SendOTPRequest": {
+        "type": "object",
+        "required": ["phone", "action_type"],
+        "properties": {
+          "phone": { "type": "string", "example": "+252615550100" },
+          "action_type": { "type": "string", "enum": ["SIGNUP", "LOGIN"], "example": "LOGIN" }
+        }
+      },
+      "VerifyOTPPayload": {
+        "type": "object",
+        "required": ["phone", "code"],
+        "properties": {
+          "phone": { "type": "string", "example": "+252615550100" },
+          "code": { "type": "string", "example": "4321" }
+        }
+      },
+      "TokenResponse": {
+        "type": "object",
+        "properties": {
+          "access_token": { "type": "string" },
+          "refresh_token": { "type": "string" },
+          "expires_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "RegisterTechRequest": {
+        "type": "object",
+        "required": ["phone", "name", "skills", "latitude", "longitude"],
+        "properties": {
+          "phone": { "type": "string", "example": "+252616660200" },
+          "email": { "type": "string", "example": "technician@hormuud.com" },
+          "name": { "type": "string", "example": "Abdi Farah" },
+          "skills": {
+            "type": "array",
+            "items": { "type": "string" },
+            "example": ["Fiber Optic", "Router Setup"]
+          },
+          "zone_assignment": { "type": "string", "example": "Waberi" },
+          "latitude": { "type": "number", "example": 2.0396 },
+          "longitude": { "type": "number", "example": 45.3182 }
+        }
+      },
+      "UpdateStatusRequest": {
+        "type": "object",
+        "required": ["status", "latitude", "longitude"],
+        "properties": {
+          "status": { "type": "string", "enum": ["ONLINE", "OFFLINE"], "example": "ONLINE" },
+          "latitude": { "type": "number", "example": 2.0396 },
+          "longitude": { "type": "number", "example": 45.3182 }
+        }
+      },
+      "CreateTicketRequest": {
+        "type": "object",
+        "required": ["title", "description", "skill_required", "latitude", "longitude"],
+        "properties": {
+          "title": { "type": "string", "example": "Fiber Outage" },
+          "description": { "type": "string", "example": "Red alarm light on router." },
+          "skill_required": { "type": "string", "example": "Fiber Optic" },
+          "landmark": { "type": "string", "example": "Opposite Shamo Hotel" },
+          "latitude": { "type": "number", "example": 2.0378 },
+          "longitude": { "type": "number", "example": 45.3150 }
+        }
+      },
+      "CustomerStats": {
+        "type": "object",
+        "properties": {
+          "total_tickets": { "type": "integer" },
+          "active_tickets": { "type": "integer" },
+          "completed_tickets": { "type": "integer" }
+        }
+      },
+      "CustomerProfileResponse": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "user_id": { "type": "string", "format": "uuid" },
+          "account_number": { "type": "string" },
+          "plan_type": { "type": "string" },
+          "current_speed": { "type": "string" },
+          "address": { "type": "string" },
+          "stats": { "$ref": "#/components/schemas/CustomerStats" }
+        }
+      },
+      "TechnicianStats": {
+        "type": "object",
+        "properties": {
+          "total_assigned": { "type": "integer" },
+          "active_tickets": { "type": "integer" },
+          "completed_tickets": { "type": "integer" },
+          "average_rating": { "type": "number" }
+        }
+      },
+      "TechnicianProfileResponse": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "user_id": { "type": "string", "format": "uuid" },
+          "status": { "type": "string" },
+          "workload": { "type": "integer" },
+          "skills": { "type": "array", "items": { "type": "string" } },
+          "rating": { "type": "number" },
+          "tasks_completed": { "type": "integer" },
+          "stats": { "$ref": "#/components/schemas/TechnicianStats" }
+        }
+      }
+    }
+  }
+}

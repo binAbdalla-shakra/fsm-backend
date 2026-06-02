@@ -164,3 +164,21 @@ func (r *technicianRepository) FindNearestMatching(ctx context.Context, lon floa
 
 	return technicians, distances, nil
 }
+
+func (r *technicianRepository) GetStats(ctx context.Context, technicianID string) (*domain.TechnicianStats, error) {
+	query := `
+		SELECT 
+			COUNT(*)::integer AS total,
+			COUNT(*) FILTER (WHERE status != 'COMPLETED')::integer AS active,
+			COUNT(*) FILTER (WHERE status = 'COMPLETED')::integer AS completed,
+			COALESCE(AVG(rating_score), 5.0)::double precision AS avg_rating
+		FROM tickets
+		WHERE technician_id = $1 AND deleted_at IS NULL
+	`
+	var stats domain.TechnicianStats
+	err := r.db.QueryRow(ctx, query, technicianID).Scan(&stats.TotalAssigned, &stats.ActiveTickets, &stats.CompletedTickets, &stats.AverageRating)
+	if err != nil {
+		return nil, err
+	}
+	return &stats, nil
+}

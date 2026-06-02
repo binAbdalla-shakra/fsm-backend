@@ -223,22 +223,44 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/customers/:id",
+              "raw": "{{base_url}}/customers/profile",
               "host": [
                 "{{base_url}}"
               ],
               "path": [
                 "customers",
-                ":id"
-              ],
-              "variable": [
+                "profile"
+              ]
+            },
+            "description": "Fetches details of the customer profile matching the bearer token, including calculated ticket reporting stats. Requires Bearer JWT."
+          }
+        },
+        {
+          "name": "Get Customer Tickets",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
                 {
-                  "key": "id",
-                  "value": "paste_customer_uuid_here"
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
                 }
               ]
             },
-            "description": "Fetches details of a customer profile. Requires Bearer JWT."
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/customers/tickets",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers",
+                "tickets"
+              ]
+            },
+            "description": "Retrieves reported tickets list by the customer resolved from their token."
           }
         }
       ]
@@ -288,22 +310,16 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/technicians/:id",
+              "raw": "{{base_url}}/technicians/profile",
               "host": [
                 "{{base_url}}"
               ],
               "path": [
                 "technicians",
-                ":id"
-              ],
-              "variable": [
-                {
-                  "key": "id",
-                  "value": "paste_technician_uuid_here"
-                }
+                "profile"
               ]
             },
-            "description": "Retrieves profiles, active status, completes task counters, and ratings of a technician."
+            "description": "Retrieves profiles, active status, completed tasks counters, dynamic ratings, and stats of the logged-in technician matching their token."
           }
         },
         {
@@ -331,23 +347,51 @@
               "raw": "{\n  \"status\": \"ONLINE\",\n  \"latitude\": 2.0396,\n  \"longitude\": 45.3182\n}"
             },
             "url": {
-              "raw": "{{base_url}}/technicians/:id/status",
+              "raw": "{{base_url}}/technicians/status",
               "host": [
                 "{{base_url}}"
               ],
               "path": [
                 "technicians",
-                ":id",
                 "status"
-              ],
-              "variable": [
+              ]
+            },
+            "description": "Updates status ('ONLINE', 'OFFLINE') and coordinate location pins for the logged-in technician matching their token. Needed for proximity auto-dispatching."
+          }
+        },
+        {
+          "name": "Get Technician Assigned Tickets",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
                 {
-                  "key": "id",
-                  "value": "paste_technician_uuid_here"
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
                 }
               ]
             },
-            "description": "Updates the technician status ('ONLINE', 'OFFLINE') and registers their current coordinate pin. Needed for proximity auto-dispatching."
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/technicians/tickets?status=COMPLETED",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "technicians",
+                "tickets"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "COMPLETED",
+                  "description": "Filter by status (e.g. COMPLETED to view finished tasks, or omit for all assigned)"
+                }
+              ]
+            },
+            "description": "Retrieves assigned tickets list (or specific completed tasks) of the logged-in technician matching their token."
           }
         }
       ]
@@ -461,6 +505,50 @@
           }
         },
         {
+          "name": "Direct Assign Ticket (By ID or Number Reference)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"technician_id\": \"paste_technician_uuid_here\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/tickets/:id/assign",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tickets",
+                ":id",
+                "assign"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "paste_ticket_uuid_or_reference_here"
+                }
+              ]
+            },
+            "description": "Directly assigns a ticket (either using ID or reference code e.g. TK-49291) to a technician. Requires `ticket:dispatch` permission."
+          }
+        },
+        {
           "name": "Start Work (Before Photo)",
           "request": {
             "auth": {
@@ -566,6 +654,50 @@
               ]
             },
             "description": "Submits work resolution details. Verifies the OTP matching the customer's secret code. Closes the ticket state to 'COMPLETED'. Requires `ticket:update` permission."
+          }
+        },
+        {
+          "name": "Submit Ticket Rating / Review",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rating\": 5,\n  \"tags\": [\"Fast\", \"Polite\", \"Professional\"],\n  \"comment\": \"Excellent service. The technician resolved the issue very quickly!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/tickets/:id/review",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tickets",
+                ":id",
+                "review"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "paste_ticket_uuid_here"
+                }
+              ]
+            },
+            "description": "Submits customer feedback on a completed ticket and updates the technician's average rating in the system."
           }
         }
       ]

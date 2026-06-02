@@ -19,6 +19,11 @@ type TicketService interface {
 	SubmitFeedback(ctx context.Context, ticketID string, rating int, tags []string, comment string) error
 	GetByID(ctx context.Context, id string) (*domain.Ticket, error)
 	GetTimelineLogs(ctx context.Context, ticketID string) ([]*domain.TicketLog, error)
+	DirectAssign(ctx context.Context, ticketRefOrID string, technicianID string) error
+	GetTicketsByTechnician(ctx context.Context, technicianID string, statusFilter string) ([]*domain.Ticket, error)
+	GetTicketsByCustomer(ctx context.Context, customerID string) ([]*domain.Ticket, error)
+	GetTicketsByTechnicianUser(ctx context.Context, techUserID string, statusFilter string) ([]*domain.Ticket, error)
+	GetTicketsByCustomerUser(ctx context.Context, custUserID string) ([]*domain.Ticket, error)
 }
 
 type ticketService struct {
@@ -234,4 +239,74 @@ func (s *ticketService) GetByID(ctx context.Context, id string) (*domain.Ticket,
 
 func (s *ticketService) GetTimelineLogs(ctx context.Context, ticketID string) ([]*domain.TicketLog, error) {
 	return s.ticketRepo.GetProgressLogs(ctx, ticketID)
+}
+
+func (s *ticketService) DirectAssign(ctx context.Context, ticketRefOrID string, technicianID string) error {
+	// 1. Fetch technician
+	tech, err := s.techRepo.GetByID(ctx, technicianID)
+	if err != nil || tech == nil {
+		return exceptions.NewNotFoundError(messages.ErrTechnicianNotFound, "TECHNICIAN_NOT_FOUND")
+	}
+
+	// 2. Fetch ticket (try reference first, then ID)
+	var ticket *domain.Ticket
+	ticket, err = s.ticketRepo.GetByNumber(ctx, ticketRefOrID)
+	if err != nil || ticket == nil {
+		ticket, err = s.ticketRepo.GetByID(ctx, ticketRefOrID)
+		if err != nil || ticket == nil {
+			return exceptions.NewNotFoundError(messages.ErrTicketNotFound, "TICKET_NOT_FOUND")
+		}
+	}
+
+	// 3. Assign
+	err = s.ticketRepo.AssignTechnician(ctx, ticket.ID, technicianID)
+	if err != nil {
+		return exceptions.NewInternalServerError(err.Error())
+	}
+
+	// Log progress timeline
+	notes := fmt.Sprintf("Dispatcher assigned ticket directly to technician %s (Reference check: %s)", tech.ID, ticket.TicketNumber)
+	_ = s.ticketRepo.LogProgress(ctx, &domain.TicketLog{
+		TicketID:    ticket.ID,
+		NewStatus:   "DISPATCHED",
+		Action:      "TICKET_DIRECT_ASSIGN",
+		Notes:       &notes,
+		PerformedBy: "00000000-0000-0000-0000-000000000000",
+	})
+
+	return nil
+}
+
+func (s *ticketService) GetTicketsByTechnician(ctx context.Context, technicianID string, statusFilter string) ([]*domain.Ticket, error) {
+	tech, err := s.techRepo.GetByID(ctx, technicianID)
+	if err != nil || tech == nil {
+		return nil, exceptions.NewNotFoundError(messages.ErrTechnicianNotFound, "TECHNICIAN_NOT_FOUND")
+	}
+
+	return s.ticketRepo.GetByTechnicianID(ctx, technicianID, statusFilter)
+}
+
+func (s *ticketService) GetTicketsByCustomer(ctx context.Context, customerID string) ([]*domain.Ticket, error) {
+	cust, err := s.custRepo.GetByID(ctx, customerID)
+	if err != nil || cust == nil {
+		return nil, exceptions.NewNotFoundError(messages.ErrCustomerNotFound, "CUSTOMER_NOT_FOUND")
+	}
+
+	return s.ticketRepo.GetByCustomerID(ctx, customerID, "")
+}
+
+func (s *ticketService) GetTicketsByTechnicianUser(ctx context.Context, techUserID string, statusFilter string) ([]*domain.Ticket, error) {
+	tech, err := s.techRepo.GetByUserID(ctx, techUserID)
+	if err != nil || tech == nil {
+		return nil, exceptions.NewNotFoundError(messages.ErrTechnicianNotFound, "TECHNICIAN_NOT_FOUND")
+	}
+	return s.ticketRepo.GetByTechnicianID(ctx, tech.ID, statusFilter)
+}
+
+func (s *ticketService) GetTicketsByCustomerUser(ctx context.Context, custUserID string) ([]*domain.Ticket, error) {
+	cust, err := s.custRepo.GetByUserID(ctx, custUserID)
+	if err != nil || cust == nil {
+		return nil, exceptions.NewNotFoundError(messages.ErrCustomerNotFound, "CUSTOMER_NOT_FOUND")
+	}
+	return s.ticketRepo.GetByCustomerID(ctx, cust.ID, "")
 }

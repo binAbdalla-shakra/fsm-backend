@@ -57,6 +57,21 @@ func (h *TechnicianHandler) GetByID(c *fiber.Ctx) error {
 	return response.SendSuccess(c, fiber.StatusOK, "Technician profile retrieved.", res)
 }
 
+func (h *TechnicianHandler) GetMe(c *fiber.Ctx) error {
+	userIDVal := c.Locals("userID")
+	if userIDVal == nil {
+		return response.SendError(c, fiber.StatusUnauthorized, "Unauthorized session context", "UNAUTHORIZED")
+	}
+
+	userID := userIDVal.(string)
+	res, err := h.service.GetByUserID(c.UserContext(), userID)
+	if err != nil {
+		return err
+	}
+
+	return response.SendSuccess(c, fiber.StatusOK, "Technician profile retrieved.", res)
+}
+
 type updateStatusRequest struct {
 	Status    string  `json:"status"`
 	Latitude  float64 `json:"latitude"`
@@ -64,13 +79,24 @@ type updateStatusRequest struct {
 }
 
 func (h *TechnicianHandler) UpdateStatus(c *fiber.Ctx) error {
-	id := c.Params("id")
+	userIDVal := c.Locals("userID")
+	if userIDVal == nil {
+		return response.SendError(c, fiber.StatusUnauthorized, "Unauthorized session context", "UNAUTHORIZED")
+	}
+	userID := userIDVal.(string)
+
 	var req updateStatusRequest
 	if err := c.BodyParser(&req); err != nil {
 		return exceptions.NewBadRequestError(messages.ErrInvalidPayload, "INVALID_PAYLOAD")
 	}
 
-	err := h.service.UpdateStatus(c.UserContext(), id, req.Status, req.Latitude, req.Longitude)
+	// Resolve tech ID from user ID
+	tech, err := h.service.GetByUserID(c.UserContext(), userID)
+	if err != nil {
+		return err
+	}
+
+	err = h.service.UpdateStatus(c.UserContext(), tech.ID, req.Status, req.Latitude, req.Longitude)
 	if err != nil {
 		return err
 	}

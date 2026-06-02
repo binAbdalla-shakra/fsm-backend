@@ -194,13 +194,50 @@ func (r *ticketRepository) CompleteTicket(ctx context.Context, ticketID string, 
 }
 
 func (r *ticketRepository) SubmitReview(ctx context.Context, ticketID string, rating int, tags []string, comment string) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	// 1. Update ticket review
 	query := `
 		UPDATE tickets
 		SET rating_score = $1, rating_tags = $2, rating_comment = $3, updated_at = NOW()
 		WHERE id = $4 AND deleted_at IS NULL
+		RETURNING technician_id
 	`
-	_, err := r.db.Exec(ctx, query, rating, tags, comment, ticketID)
-	return err
+	var techID *string
+	err = tx.QueryRow(ctx, query, rating, tags, comment, ticketID).Scan(&techID)
+	if err != nil {
+		return err
+	}
+
+	if techID != nil {
+		// 2. Re-calculate average rating for this technician across all their rated tickets
+		var avgRating float64
+		err = tx.QueryRow(ctx, `
+			SELECT COALESCE(AVG(rating_score), 5.0)::double precision
+			FROM tickets
+			WHERE technician_id = $1 AND rating_score IS NOT NULL AND deleted_at IS NULL
+		`, *techID).Scan(&avgRating)
+		if err != nil {
+			return err
+		}
+
+		// 3. Update the technician's rating
+		_, err = tx.Exec(ctx, `
+			UPDATE technicians
+			SET rating = $1,
+			    updated_at = NOW()
+			WHERE id = $2 AND deleted_at IS NULL
+		`, avgRating, *techID)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit(ctx)
 }
 
 func (r *ticketRepository) LogProgress(ctx context.Context, l *domain.TicketLog) error {
@@ -235,4 +272,80 @@ func (r *ticketRepository) GetProgressLogs(ctx context.Context, ticketID string)
 		logs = append(logs, &l)
 	}
 	return logs, nil
+}
+
+func (r *ticketRepository) GetByTechnicianID(ctx context.Context, techID string, statusFilter string) ([]*domain.Ticket, error) {
+	query := `
+		SELECT id, ticket_number, customer_id, technician_id, title, description, category, priority, status, landmark,
+		       ST_Y(location) AS latitude, ST_X(location) AS longitude, before_photo_url, after_photo_url, otp_code,
+		       rating_score, rating_tags, rating_comment, created_at, updated_at
+		FROM tickets
+		WHERE technician_id = $1 AND deleted_at IS NULL
+	`
+	var rows pgx.Rows
+	var err error
+	if statusFilter != "" {
+		query += " AND status = $2 ORDER BY created_at DESC"
+		rows, err = r.db.Query(ctx, query, techID, statusFilter)
+	} else {
+		query += " ORDER BY created_at DESC"
+		rows, err = r.db.Query(ctx, query, techID)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tickets []*domain.Ticket
+	for rows.Next() {
+		var t domain.Ticket
+		err := rows.Scan(
+			&t.ID, &t.TicketNumber, &t.CustomerID, &t.TechnicianID, &t.Title, &t.Description, &t.Category, &t.Priority, &t.Status, &t.Landmark,
+			&t.Latitude, &t.Longitude, &t.BeforePhotoURL, &t.AfterPhotoURL, &t.OTPCode,
+			&t.RatingScore, &t.RatingTags, &t.RatingComment, &t.CreatedAt, &t.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		tickets = append(tickets, &t)
+	}
+	return tickets, nil
+}
+
+func (r *ticketRepository) GetByCustomerID(ctx context.Context, custID string, statusFilter string) ([]*domain.Ticket, error) {
+	query := `
+		SELECT id, ticket_number, customer_id, technician_id, title, description, category, priority, status, landmark,
+		       ST_Y(location) AS latitude, ST_X(location) AS longitude, before_photo_url, after_photo_url, otp_code,
+		       rating_score, rating_tags, rating_comment, created_at, updated_at
+		FROM tickets
+		WHERE customer_id = $1 AND deleted_at IS NULL
+	`
+	var rows pgx.Rows
+	var err error
+	if statusFilter != "" {
+		query += " AND status = $2 ORDER BY created_at DESC"
+		rows, err = r.db.Query(ctx, query, custID, statusFilter)
+	} else {
+		query += " ORDER BY created_at DESC"
+		rows, err = r.db.Query(ctx, query, custID)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tickets []*domain.Ticket
+	for rows.Next() {
+		var t domain.Ticket
+		err := rows.Scan(
+			&t.ID, &t.TicketNumber, &t.CustomerID, &t.TechnicianID, &t.Title, &t.Description, &t.Category, &t.Priority, &t.Status, &t.Landmark,
+			&t.Latitude, &t.Longitude, &t.BeforePhotoURL, &t.AfterPhotoURL, &t.OTPCode,
+			&t.RatingScore, &t.RatingTags, &t.RatingComment, &t.CreatedAt, &t.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		tickets = append(tickets, &t)
+	}
+	return tickets, nil
 }
