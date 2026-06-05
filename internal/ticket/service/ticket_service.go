@@ -24,6 +24,9 @@ type TicketService interface {
 	GetTicketsByCustomer(ctx context.Context, customerID string) ([]*domain.Ticket, error)
 	GetTicketsByTechnicianUser(ctx context.Context, techUserID string, statusFilter string) ([]*domain.Ticket, error)
 	GetTicketsByCustomerUser(ctx context.Context, custUserID string) ([]*domain.Ticket, error)
+	AcceptTicket(ctx context.Context, ticketID string, technicianUserID string) error
+	RejectTicket(ctx context.Context, ticketID string, technicianUserID string) error
+	TransitTicket(ctx context.Context, ticketID string, technicianUserID string) error
 }
 
 type ticketService struct {
@@ -98,30 +101,45 @@ func (s *ticketService) AutoDispatch(ctx context.Context, ticketID string) error
 		return exceptions.NewNotFoundError(messages.ErrTicketNotFound, "TICKET_NOT_FOUND")
 	}
 
-	// 1. Fetch nearest matching technician (radius 50km = 50000m)
-	techs, _, err := s.techRepo.FindNearestMatching(ctx, ticket.Longitude, ticket.Latitude, ticket.Category, 50000.0)
+	// 1. Fetch nearest matching technician with workload = 0 within 3km
+	techs, _, err := s.techRepo.FindNearestMatching(ctx, ticket.Longitude, ticket.Latitude, ticket.Category, 3000.0, ticket.RejectedTechnicianIDs, false)
 	if err != nil {
 		return exceptions.NewInternalServerError(err.Error())
 	}
 
-	if len(techs) == 0 {
+	var matchedTech *domain.Technician
+	if len(techs) > 0 {
+		matchedTech = techs[0]
+	} else {
+		// 2. Fallback: Fetch nearest matching technician with workload > 0 (lowest workload first) within 3km
+		techs, _, err = s.techRepo.FindNearestMatching(ctx, ticket.Longitude, ticket.Latitude, ticket.Category, 3000.0, ticket.RejectedTechnicianIDs, true)
+		if err != nil {
+			return exceptions.NewInternalServerError(err.Error())
+		}
+		if len(techs) > 0 {
+			matchedTech = techs[0]
+		}
+	}
+
+	if matchedTech == nil {
+		// No online technician found within 3km. Reset/leave status as REPORTED (Queued).
+		_ = s.ticketRepo.UpdateStatus(ctx, ticketID, "REPORTED", "No available technicians within 3km. Queued.", "00000000-0000-0000-0000-000000000000")
 		return exceptions.NewNotFoundError(messages.ErrDispatchFailed, "NO_MATCHING_TECHNICIANS")
 	}
 
-	matchedTech := techs[0]
-
-	// 2. Assign and update status to DISPATCHED
+	// 3. Assign technician (status becomes AUTO_DISPATCHING)
 	err = s.ticketRepo.AssignTechnician(ctx, ticketID, matchedTech.ID)
 	if err != nil {
 		return exceptions.NewInternalServerError(err.Error())
 	}
 
 	// Log audit trail
-	notes := fmt.Sprintf("System auto-dispatched ticket to technician ID %s", matchedTech.ID)
+	notes := fmt.Sprintf("System auto-dispatched ticket to technician ID %s (Pending Acceptance)", matchedTech.ID)
 	_ = s.ticketRepo.LogProgress(ctx, &domain.TicketLog{
 		TicketID:    ticketID,
-		NewStatus:   "DISPATCHED",
-		Action:      "TICKET_DISPATCHED",
+		OldStatus:   &ticket.Status,
+		NewStatus:   "AUTO_DISPATCHING",
+		Action:      "TICKET_AUTO_ASSIGNED",
 		Notes:       &notes,
 		PerformedBy: "00000000-0000-0000-0000-000000000000", // System UUID
 	})
@@ -309,4 +327,106 @@ func (s *ticketService) GetTicketsByCustomerUser(ctx context.Context, custUserID
 		return nil, exceptions.NewNotFoundError(messages.ErrCustomerNotFound, "CUSTOMER_NOT_FOUND")
 	}
 	return s.ticketRepo.GetByCustomerID(ctx, cust.ID, "")
+}
+
+func (s *ticketService) AcceptTicket(ctx context.Context, ticketID string, technicianUserID string) error {
+	tech, err := s.techRepo.GetByUserID(ctx, technicianUserID)
+	if err != nil || tech == nil {
+		return exceptions.NewNotFoundError(messages.ErrTechnicianNotFound, "TECHNICIAN_NOT_FOUND")
+	}
+
+	ticket, err := s.ticketRepo.GetByID(ctx, ticketID)
+	if err != nil || ticket == nil {
+		return exceptions.NewNotFoundError(messages.ErrTicketNotFound, "TICKET_NOT_FOUND")
+	}
+
+	if ticket.TechnicianID == nil || *ticket.TechnicianID != tech.ID {
+		return exceptions.NewBadRequestError(messages.ErrUnauthorizedTech, "UNAUTHORIZED_ACTION")
+	}
+
+	err = s.ticketRepo.AcceptTicket(ctx, ticketID)
+	if err != nil {
+		return exceptions.NewInternalServerError(err.Error())
+	}
+
+	notes := fmt.Sprintf("Technician %s accepted the ticket", tech.ID)
+	_ = s.ticketRepo.LogProgress(ctx, &domain.TicketLog{
+		TicketID:    ticketID,
+		OldStatus:   &ticket.Status,
+		NewStatus:   "DISPATCHED",
+		Action:      "TICKET_ACCEPTED",
+		Notes:       &notes,
+		PerformedBy: technicianUserID,
+	})
+
+	return nil
+}
+
+func (s *ticketService) RejectTicket(ctx context.Context, ticketID string, technicianUserID string) error {
+	tech, err := s.techRepo.GetByUserID(ctx, technicianUserID)
+	if err != nil || tech == nil {
+		return exceptions.NewNotFoundError(messages.ErrTechnicianNotFound, "TECHNICIAN_NOT_FOUND")
+	}
+
+	ticket, err := s.ticketRepo.GetByID(ctx, ticketID)
+	if err != nil || ticket == nil {
+		return exceptions.NewNotFoundError(messages.ErrTicketNotFound, "TICKET_NOT_FOUND")
+	}
+
+	if ticket.TechnicianID == nil || *ticket.TechnicianID != tech.ID {
+		return exceptions.NewBadRequestError(messages.ErrUnauthorizedTech, "UNAUTHORIZED_ACTION")
+	}
+
+	err = s.ticketRepo.RejectTicket(ctx, ticketID, tech.ID)
+	if err != nil {
+		return exceptions.NewInternalServerError(err.Error())
+	}
+
+	notes := fmt.Sprintf("Technician %s rejected the ticket", tech.ID)
+	_ = s.ticketRepo.LogProgress(ctx, &domain.TicketLog{
+		TicketID:    ticketID,
+		OldStatus:   &ticket.Status,
+		NewStatus:   "REPORTED",
+		Action:      "TICKET_REJECTED",
+		Notes:       &notes,
+		PerformedBy: technicianUserID,
+	})
+
+	// Re-run AutoDispatch to find the next nearest technician excluding the rejected ones
+	_ = s.AutoDispatch(ctx, ticketID)
+
+	return nil
+}
+
+func (s *ticketService) TransitTicket(ctx context.Context, ticketID string, technicianUserID string) error {
+	tech, err := s.techRepo.GetByUserID(ctx, technicianUserID)
+	if err != nil || tech == nil {
+		return exceptions.NewNotFoundError(messages.ErrTechnicianNotFound, "TECHNICIAN_NOT_FOUND")
+	}
+
+	ticket, err := s.ticketRepo.GetByID(ctx, ticketID)
+	if err != nil || ticket == nil {
+		return exceptions.NewNotFoundError(messages.ErrTicketNotFound, "TICKET_NOT_FOUND")
+	}
+
+	if ticket.TechnicianID == nil || *ticket.TechnicianID != tech.ID {
+		return exceptions.NewBadRequestError(messages.ErrUnauthorizedTech, "UNAUTHORIZED_ACTION")
+	}
+
+	err = s.ticketRepo.TransitTicket(ctx, ticketID)
+	if err != nil {
+		return exceptions.NewInternalServerError(err.Error())
+	}
+
+	notes := "Technician marked themselves en route to customer location"
+	_ = s.ticketRepo.LogProgress(ctx, &domain.TicketLog{
+		TicketID:    ticketID,
+		OldStatus:   &ticket.Status,
+		NewStatus:   "ON_THE_WAY",
+		Action:      "TICKET_TRANSIT",
+		Notes:       &notes,
+		PerformedBy: technicianUserID,
+	})
+
+	return nil
 }

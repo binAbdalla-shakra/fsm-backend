@@ -48,6 +48,10 @@ func RegisterRoutes(app *fiber.App, deps *AppDependencies) {
 	api.Post("/tickets/:id/start", authMiddleware, deps.TicketHandler.Start)
 	api.Post("/tickets/:id/complete", authMiddleware, deps.TicketHandler.Complete)
 	api.Post("/tickets/:id/review", authMiddleware, deps.TicketHandler.Review)
+	api.Post("/tickets/:id/accept", authMiddleware, deps.TicketHandler.Accept)
+	api.Post("/tickets/:id/reject", authMiddleware, deps.TicketHandler.Reject)
+	api.Post("/tickets/:id/transit", authMiddleware, deps.TicketHandler.Transit)
+	api.Get("/tickets/:id/logs", authMiddleware, deps.TicketHandler.GetLogs)
 
 	// 5. WebSockets Telemetry Routes
 	app.Use("/ws", func(c *fiber.Ctx) error {

@@ -21,7 +21,7 @@ import (
 	trackService "fsm-backend/internal/tracking/service"
 	userRepo "fsm-backend/internal/user/repository"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -37,7 +37,7 @@ type AppDependencies struct {
 }
 
 // InitializeDependencies resolves repository, service, and handler layers.
-func InitializeDependencies(pgConn *pgx.Conn, rdb *redis.Client) *AppDependencies {
+func InitializeDependencies(pgConn *pgxpool.Pool, rdb *redis.Client) *AppDependencies {
 	cfg := config.LoadConfig()
 
 	// Repositories

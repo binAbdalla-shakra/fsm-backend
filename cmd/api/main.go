@@ -27,7 +27,7 @@ func main() {
 		log.Printf("DATABASE CONNECTION ERROR: %v", err)
 		os.Exit(1)
 	}
-	defer pgConn.Close(ctx)
+	defer pgConn.Close()
 	log.Println("Connected to PostgreSQL successfully.")
 
 	rdb, err := config.ConnectRedis(ctx, cfg.RedisURL)

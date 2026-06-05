@@ -3,13 +3,13 @@ package config
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
 
-// ConnectPostgres initializes a connection to the PostgreSQL database.
-func ConnectPostgres(ctx context.Context, databaseURL string) (*pgx.Conn, error) {
-	return pgx.Connect(ctx, databaseURL)
+// ConnectPostgres initializes a connection pool to the PostgreSQL database.
+func ConnectPostgres(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
+	return pgxpool.New(ctx, databaseURL)
 }
 
 // ConnectRedis initializes and pings the Redis client.

@@ -6,13 +6,14 @@ import (
 	"fsm-backend/internal/domain"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type ticketRepository struct {
-	db *pgx.Conn
+	db *pgxpool.Pool
 }
 
-func NewTicketRepository(db *pgx.Conn) domain.TicketRepository {
+func NewTicketRepository(db *pgxpool.Pool) domain.TicketRepository {
 	return &ticketRepository{db: db}
 }
 
@@ -29,17 +30,27 @@ func (r *ticketRepository) Create(ctx context.Context, t *domain.Ticket) error {
 
 func (r *ticketRepository) GetByID(ctx context.Context, id string) (*domain.Ticket, error) {
 	query := `
-		SELECT id, ticket_number, customer_id, technician_id, title, description, category, priority, status, landmark,
-		       ST_Y(location) AS latitude, ST_X(location) AS longitude, before_photo_url, after_photo_url, otp_code,
-		       rating_score, rating_tags, rating_comment, created_at, updated_at
-		FROM tickets
-		WHERE id = $1 AND deleted_at IS NULL
+		SELECT t.id, t.ticket_number, t.customer_id, t.technician_id, t.title, t.description, t.category, t.priority, t.status, t.landmark,
+		       ST_Y(t.location) AS latitude, ST_X(t.location) AS longitude, t.before_photo_url, t.after_photo_url, t.otp_code,
+		       t.rating_score, t.rating_tags, t.rating_comment, t.rejected_technician_ids, t.created_at, t.updated_at,
+		       COALESCE(u.name, 'Customer'), u.phone, COALESCE(c.address, ''),
+		       COALESCE(tu.name, ''), COALESCE(tu.phone, ''), COALESCE(tech.rating, 5.0),
+		       COALESCE(ST_Y(tech.location), 0.0) AS tech_latitude, COALESCE(ST_X(tech.location), 0.0) AS tech_longitude
+		FROM tickets t
+		JOIN customers c ON t.customer_id = c.id
+		JOIN users u ON c.user_id = u.id
+		LEFT JOIN technicians tech ON t.technician_id = tech.id
+		LEFT JOIN users tu ON tech.user_id = tu.id
+		WHERE t.id = $1 AND t.deleted_at IS NULL
 	`
 	var t domain.Ticket
+	var rejTechs []string
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&t.ID, &t.TicketNumber, &t.CustomerID, &t.TechnicianID, &t.Title, &t.Description, &t.Category, &t.Priority, &t.Status, &t.Landmark,
 		&t.Latitude, &t.Longitude, &t.BeforePhotoURL, &t.AfterPhotoURL, &t.OTPCode,
-		&t.RatingScore, &t.RatingTags, &t.RatingComment, &t.CreatedAt, &t.UpdatedAt,
+		&t.RatingScore, &t.RatingTags, &t.RatingComment, &rejTechs, &t.CreatedAt, &t.UpdatedAt,
+		&t.CustomerName, &t.CustomerPhone, &t.Address,
+		&t.TechnicianName, &t.TechnicianPhone, &t.TechnicianRating, &t.TechnicianLatitude, &t.TechnicianLongitude,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -47,22 +58,34 @@ func (r *ticketRepository) GetByID(ctx context.Context, id string) (*domain.Tick
 		}
 		return nil, err
 	}
+	t.RejectedTechnicianIDs = rejTechs
+	t.ServiceType = t.Category
 	return &t, nil
 }
 
 func (r *ticketRepository) GetByNumber(ctx context.Context, num string) (*domain.Ticket, error) {
 	query := `
-		SELECT id, ticket_number, customer_id, technician_id, title, description, category, priority, status, landmark,
-		       ST_Y(location) AS latitude, ST_X(location) AS longitude, before_photo_url, after_photo_url, otp_code,
-		       rating_score, rating_tags, rating_comment, created_at, updated_at
-		FROM tickets
-		WHERE ticket_number = $1 AND deleted_at IS NULL
+		SELECT t.id, t.ticket_number, t.customer_id, t.technician_id, t.title, t.description, t.category, t.priority, t.status, t.landmark,
+		       ST_Y(t.location) AS latitude, ST_X(t.location) AS longitude, t.before_photo_url, t.after_photo_url, t.otp_code,
+		       t.rating_score, t.rating_tags, t.rating_comment, t.rejected_technician_ids, t.created_at, t.updated_at,
+		       COALESCE(u.name, 'Customer'), u.phone, COALESCE(c.address, ''),
+		       COALESCE(tu.name, ''), COALESCE(tu.phone, ''), COALESCE(tech.rating, 5.0),
+		       COALESCE(ST_Y(tech.location), 0.0) AS tech_latitude, COALESCE(ST_X(tech.location), 0.0) AS tech_longitude
+		FROM tickets t
+		JOIN customers c ON t.customer_id = c.id
+		JOIN users u ON c.user_id = u.id
+		LEFT JOIN technicians tech ON t.technician_id = tech.id
+		LEFT JOIN users tu ON tech.user_id = tu.id
+		WHERE t.ticket_number = $1 AND t.deleted_at IS NULL
 	`
 	var t domain.Ticket
+	var rejTechs []string
 	err := r.db.QueryRow(ctx, query, num).Scan(
 		&t.ID, &t.TicketNumber, &t.CustomerID, &t.TechnicianID, &t.Title, &t.Description, &t.Category, &t.Priority, &t.Status, &t.Landmark,
 		&t.Latitude, &t.Longitude, &t.BeforePhotoURL, &t.AfterPhotoURL, &t.OTPCode,
-		&t.RatingScore, &t.RatingTags, &t.RatingComment, &t.CreatedAt, &t.UpdatedAt,
+		&t.RatingScore, &t.RatingTags, &t.RatingComment, &rejTechs, &t.CreatedAt, &t.UpdatedAt,
+		&t.CustomerName, &t.CustomerPhone, &t.Address,
+		&t.TechnicianName, &t.TechnicianPhone, &t.TechnicianRating, &t.TechnicianLatitude, &t.TechnicianLongitude,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -70,6 +93,8 @@ func (r *ticketRepository) GetByNumber(ctx context.Context, num string) (*domain
 		}
 		return nil, err
 	}
+	t.RejectedTechnicianIDs = rejTechs
+	t.ServiceType = t.Category
 	return &t, nil
 }
 
@@ -84,40 +109,13 @@ func (r *ticketRepository) Update(ctx context.Context, t *domain.Ticket) error {
 }
 
 func (r *ticketRepository) AssignTechnician(ctx context.Context, ticketID string, techID string) error {
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-
-	// Fetch current technician if exists
-	var oldTechID *string
-	err = tx.QueryRow(ctx, "SELECT technician_id FROM tickets WHERE id = $1", ticketID).Scan(&oldTechID)
-	if err != nil {
-		return err
-	}
-
-	if oldTechID != nil {
-		// Decrease workload for previous technician
-		_, err = tx.Exec(ctx, "UPDATE technicians SET workload = GREATEST(0, workload - 1) WHERE id = $1", *oldTechID)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Update ticket status
-	_, err = tx.Exec(ctx, "UPDATE tickets SET technician_id = $1, status = 'DISPATCHED', updated_at = NOW() WHERE id = $2", techID, ticketID)
-	if err != nil {
-		return err
-	}
-
-	// Increase workload for matched technician
-	_, err = tx.Exec(ctx, "UPDATE technicians SET workload = workload + 1 WHERE id = $1", techID)
-	if err != nil {
-		return err
-	}
-
-	return tx.Commit(ctx)
+	query := `
+		UPDATE tickets
+		SET technician_id = $1, status = 'AUTO_DISPATCHING', updated_at = NOW()
+		WHERE id = $2 AND deleted_at IS NULL
+	`
+	_, err := r.db.Exec(ctx, query, techID, ticketID)
+	return err
 }
 
 func (r *ticketRepository) UpdateStatus(ctx context.Context, ticketID string, status string, notes string, performedBy string) error {
@@ -348,4 +346,56 @@ func (r *ticketRepository) GetByCustomerID(ctx context.Context, custID string, s
 		tickets = append(tickets, &t)
 	}
 	return tickets, nil
+}
+
+func (r *ticketRepository) AcceptTicket(ctx context.Context, ticketID string) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var techID *string
+	err = tx.QueryRow(ctx, "SELECT technician_id FROM tickets WHERE id = $1", ticketID).Scan(&techID)
+	if err != nil || techID == nil {
+		return errors.New("technician not assigned to ticket")
+	}
+
+	// Update ticket status to DISPATCHED
+	_, err = tx.Exec(ctx, "UPDATE tickets SET status = 'DISPATCHED', updated_at = NOW() WHERE id = $1", ticketID)
+	if err != nil {
+		return err
+	}
+
+	// Increase workload for the technician
+	_, err = tx.Exec(ctx, "UPDATE technicians SET workload = workload + 1 WHERE id = $1", *techID)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (r *ticketRepository) RejectTicket(ctx context.Context, ticketID string, techID string) error {
+	// Reset technician_id, add technician to rejected_technician_ids array, and reset status to REPORTED
+	query := `
+		UPDATE tickets
+		SET technician_id = NULL,
+		    status = 'REPORTED',
+		    rejected_technician_ids = array_append(rejected_technician_ids, $1::UUID),
+		    updated_at = NOW()
+		WHERE id = $2
+	`
+	_, err := r.db.Exec(ctx, query, techID, ticketID)
+	return err
+}
+
+func (r *ticketRepository) TransitTicket(ctx context.Context, ticketID string) error {
+	query := `
+		UPDATE tickets
+		SET status = 'ON_THE_WAY', updated_at = NOW()
+		WHERE id = $1
+	`
+	_, err := r.db.Exec(ctx, query, ticketID)
+	return err
 }

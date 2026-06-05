@@ -6,27 +6,39 @@ import (
 )
 
 type Ticket struct {
-	ID             string     `json:"id"`
-	TicketNumber   string     `json:"ticket_number"`
-	CustomerID     string     `json:"customer_id"`
-	TechnicianID   *string    `json:"technician_id,omitempty"`
-	Title          string     `json:"title"`
-	Description    string     `json:"description"`
-	Category       string     `json:"category"`
-	Priority       string     `json:"priority"`
-	Status         string     `json:"status"`
-	Landmark       *string    `json:"landmark,omitempty"`
-	Latitude       float64    `json:"latitude"`
-	Longitude      float64    `json:"longitude"`
-	BeforePhotoURL *string    `json:"before_photo_url,omitempty"`
-	AfterPhotoURL  *string    `json:"after_photo_url,omitempty"`
-	OTPCode        string     `json:"otp_code"`
-	RatingScore    *int       `json:"rating_score,omitempty"`
-	RatingTags     []string   `json:"rating_tags,omitempty"`
-	RatingComment  *string    `json:"rating_comment,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
-	DeletedAt      *time.Time `json:"-"`
+	ID                    string     `json:"id"`
+	TicketNumber          string     `json:"ticket_number"`
+	CustomerID            string     `json:"customer_id"`
+	TechnicianID          *string    `json:"technician_id,omitempty"`
+	Title                 string     `json:"title"`
+	Description           string     `json:"description"`
+	Category              string     `json:"category"`
+	Priority              string     `json:"priority"`
+	Status                string     `json:"status"`
+	Landmark              *string    `json:"landmark,omitempty"`
+	Latitude              float64    `json:"latitude"`
+	Longitude             float64    `json:"longitude"`
+	BeforePhotoURL        *string    `json:"before_photo_url,omitempty"`
+	AfterPhotoURL         *string    `json:"after_photo_url,omitempty"`
+	OTPCode               string     `json:"otp_code"`
+	RatingScore           *int       `json:"rating_score,omitempty"`
+	RatingTags            []string   `json:"rating_tags,omitempty"`
+	RatingComment         *string    `json:"rating_comment,omitempty"`
+	RejectedTechnicianIDs []string   `json:"rejected_technician_ids,omitempty"`
+	CreatedAt             time.Time  `json:"created_at"`
+	UpdatedAt             time.Time  `json:"updated_at"`
+	DeletedAt             *time.Time `json:"-"`
+
+	// Dynamically Populated Fields for Frontend Compatibility
+	CustomerName     string  `json:"customerName,omitempty"`
+	CustomerPhone    string  `json:"customerPhone,omitempty"`
+	Address          string  `json:"address,omitempty"`
+	ServiceType      string  `json:"serviceType,omitempty"`
+	TechnicianName      string  `json:"technicianName,omitempty"`
+	TechnicianPhone     string  `json:"technicianPhone,omitempty"`
+	TechnicianRating    float64 `json:"technicianRating,omitempty"`
+	TechnicianLatitude  float64 `json:"technicianLatitude,omitempty"`
+	TechnicianLongitude float64 `json:"technicianLongitude,omitempty"`
 }
 
 type TicketLog struct {
@@ -67,6 +79,9 @@ type TicketRepository interface {
 	GetProgressLogs(ctx context.Context, ticketID string) ([]*TicketLog, error)
 	GetByTechnicianID(ctx context.Context, techID string, statusFilter string) ([]*Ticket, error)
 	GetByCustomerID(ctx context.Context, custID string, statusFilter string) ([]*Ticket, error)
+	AcceptTicket(ctx context.Context, ticketID string) error
+	RejectTicket(ctx context.Context, ticketID string, techID string) error
+	TransitTicket(ctx context.Context, ticketID string) error
 }
 
 type AuditRepository interface {

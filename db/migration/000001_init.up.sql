@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     phone VARCHAR(30) UNIQUE NOT NULL,
     email VARCHAR(150) UNIQUE,
+    name VARCHAR(100),
     password_hash VARCHAR(255), -- for potential future password authentication
     status VARCHAR(30) NOT NULL DEFAULT 'PENDING_VERIFICATION', -- PENDING, ACTIVE, SUSPENDED
     is_verified BOOLEAN NOT NULL DEFAULT FALSE,
@@ -129,7 +130,7 @@ CREATE TABLE IF NOT EXISTS tickets (
     description TEXT NOT NULL,
     category VARCHAR(100) NOT NULL, -- No Internet, Slow Connection, Intermittent, Equipment
     priority VARCHAR(20) NOT NULL DEFAULT 'MEDIUM', -- LOW, MEDIUM, HIGH, URGENT
-    status VARCHAR(40) NOT NULL DEFAULT 'REPORTED', -- REPORTED, AUTO_DISPATCHING, DISPATCHED, IN_PROGRESS, RESOLVED, COMPLETED
+    status VARCHAR(40) NOT NULL DEFAULT 'REPORTED', -- REPORTED, AUTO_DISPATCHING, DISPATCHED, ON_THE_WAY, IN_PROGRESS, RESOLVED, COMPLETED
     landmark TEXT,
     location GEOMETRY(Point, 4326) NOT NULL,
     before_photo_url VARCHAR(255),
@@ -138,6 +139,7 @@ CREATE TABLE IF NOT EXISTS tickets (
     rating_score INTEGER,
     rating_tags VARCHAR(100)[],
     rating_comment TEXT,
+    rejected_technician_ids UUID[] NOT NULL DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP WITH TIME ZONE,

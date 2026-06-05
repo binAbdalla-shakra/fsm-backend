@@ -6,13 +6,14 @@ import (
 	"fsm-backend/internal/domain"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type technicianRepository struct {
-	db *pgx.Conn
+	db *pgxpool.Pool
 }
 
-func NewTechnicianRepository(db *pgx.Conn) domain.TechnicianRepository {
+func NewTechnicianRepository(db *pgxpool.Pool) domain.TechnicianRepository {
 	return &technicianRepository{db: db}
 }
 
@@ -114,21 +115,36 @@ func (r *technicianRepository) UpdateWorkload(ctx context.Context, id string, ch
 	return err
 }
 
-func (r *technicianRepository) FindNearestMatching(ctx context.Context, lon float64, lat float64, skill string, maxDistance float64) ([]*domain.Technician, []float64, error) {
+func (r *technicianRepository) FindNearestMatching(ctx context.Context, lon float64, lat float64, skill string, maxDistance float64, excludeTechIDs []string, allowBusy bool) ([]*domain.Technician, []float64, error) {
+	if excludeTechIDs == nil {
+		excludeTechIDs = []string{}
+	}
+
 	query := `
 		SELECT id, user_id, status, workload, skills, ST_Y(location) AS latitude, ST_X(location) AS longitude,
 		       zone_assignment, rating, tasks_completed, created_at, updated_at,
 		       ST_DistanceSphere(location, ST_SetSRID(ST_MakePoint($1, $2), 4326)) AS distance_meters
 		FROM technicians
 		WHERE status = 'ONLINE'
-		  AND workload = 0
-		  AND $3 = ANY(skills)
-		  AND ST_DWithin(location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $4)
-		ORDER BY distance_meters ASC
-		LIMIT 5
+		  AND NOT (id = ANY($4))
 	`
+	if !allowBusy {
+		query += " AND workload = 0 "
+	} else {
+		query += " AND workload > 0 "
+	}
 
-	rows, err := r.db.Query(ctx, query, lon, lat, skill, maxDistance)
+	if maxDistance > 0 {
+		query += " AND ST_DWithin(location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3) "
+	}
+
+	if allowBusy {
+		query += " ORDER BY workload ASC, distance_meters ASC LIMIT 5 "
+	} else {
+		query += " ORDER BY distance_meters ASC LIMIT 5 "
+	}
+
+	rows, err := r.db.Query(ctx, query, lon, lat, maxDistance, excludeTechIDs)
 	if err != nil {
 		return nil, nil, err
 	}

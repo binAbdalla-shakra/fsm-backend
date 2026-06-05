@@ -9,6 +9,7 @@ type User struct {
 	ID           string     `json:"id"`
 	Phone        string     `json:"phone"`
 	Email        *string    `json:"email,omitempty"`
+	Name         string     `json:"name,omitempty"`
 	PasswordHash *string    `json:"-"`
 	Status       string     `json:"status"`
 	IsVerified   bool       `json:"is_verified"`
@@ -115,6 +116,6 @@ type TechnicianRepository interface {
 	GetByUserID(ctx context.Context, userID string) (*Technician, error)
 	UpdateStatusAndLocation(ctx context.Context, id string, status string, lat float64, lon float64) error
 	UpdateWorkload(ctx context.Context, id string, change int) error
-	FindNearestMatching(ctx context.Context, lon float64, lat float64, skill string, maxDistance float64) ([]*Technician, []float64, error)
+	FindNearestMatching(ctx context.Context, lon float64, lat float64, skill string, maxDistance float64, excludeTechIDs []string, allowBusy bool) ([]*Technician, []float64, error)
 	GetStats(ctx context.Context, technicianID string) (*TechnicianStats, error)
 }

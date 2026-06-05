@@ -117,7 +117,7 @@ func (s *authService) VerifyOTPAndLogin(ctx context.Context, req *dto.VerifyOTPP
 	}
 
 	// 3. Issue Access JWT
-	accessToken, err := jwt.GenerateToken(user.ID, primaryRole, permissions, s.jwtSecret, 15) // 15 mins expiry
+	accessToken, err := jwt.GenerateToken(user.ID, primaryRole, permissions, s.jwtSecret, 43200) // 30 days expiry
 	if err != nil {
 		return nil, exceptions.NewInternalServerError("Failed to sign access token JWT")
 	}
@@ -135,7 +135,7 @@ func (s *authService) VerifyOTPAndLogin(ctx context.Context, req *dto.VerifyOTPP
 		DeviceName:       req.DeviceName,
 		RefreshTokenHash: rfHash,
 		IPAddress:        ipAddress,
-		ExpiresAt:        time.Now().Add(7 * 24 * time.Hour), // 7 days expiry
+		ExpiresAt:        time.Now().Add(365 * 24 * time.Hour), // 365 days expiry
 	}
 
 	err = s.sessionRepo.CreateSession(ctx, &session)
@@ -155,10 +155,11 @@ func (s *authService) SignUpCustomer(ctx context.Context, payload *dto.SignUpPay
 		return exceptions.NewBadRequestError("Missing signup information fields", "INVALID_SIGNUP_PAYLOAD")
 	}
 
-	// 1. Create Core User profile
+		// 1. Create Core User profile
 	user := domain.User{
 		Phone:      payload.Phone,
 		Email:      payload.Email,
+		Name:       payload.Name,
 		Status:     "PENDING_VERIFICATION",
 		IsVerified: false,
 	}
@@ -233,7 +234,7 @@ func (s *authService) RefreshSession(ctx context.Context, payload *dto.RefreshTo
 	}
 
 	// 2. Generate new Access JWT
-	newAccessToken, err := jwt.GenerateToken(user.ID, primaryRole, permissions, s.jwtSecret, 15)
+	newAccessToken, err := jwt.GenerateToken(user.ID, primaryRole, permissions, s.jwtSecret, 43200) // 30 days expiry
 	if err != nil {
 		return nil, exceptions.NewInternalServerError("Failed to sign access token")
 	}
@@ -245,7 +246,7 @@ func (s *authService) RefreshSession(ctx context.Context, payload *dto.RefreshTo
 	newRfHash := hex.EncodeToString(newHasher.Sum(nil))
 
 	session.RefreshTokenHash = newRfHash
-	session.ExpiresAt = time.Now().Add(7 * 24 * time.Hour)
+	session.ExpiresAt = time.Now().Add(365 * 24 * time.Hour) // 365 days expiry
 	session.IPAddress = ipAddress
 
 	err = s.sessionRepo.UpdateSession(ctx, session)

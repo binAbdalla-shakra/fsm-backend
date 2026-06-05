@@ -6,13 +6,14 @@ import (
 	"fsm-backend/internal/domain"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type sessionRepository struct {
-	db *pgx.Conn
+	db *pgxpool.Pool
 }
 
-func NewSessionRepository(db *pgx.Conn) domain.SessionRepository {
+func NewSessionRepository(db *pgxpool.Pool) domain.SessionRepository {
 	return &sessionRepository{db: db}
 }
 
@@ -132,10 +133,10 @@ func (r *sessionRepository) GetUserSessions(ctx context.Context, userID string) 
 
 // otpRepository handles saving verification tokens in PostgreSQL
 type otpRepository struct {
-	db *pgx.Conn
+	db *pgxpool.Pool
 }
 
-func NewOTPRepository(db *pgx.Conn) domain.OTPRepository {
+func NewOTPRepository(db *pgxpool.Pool) domain.OTPRepository {
 	return &otpRepository{db: db}
 }
 

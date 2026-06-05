@@ -206,3 +206,58 @@ func (h *TicketHandler) Review(c *fiber.Ctx) error {
 
 	return response.SendSuccess(c, fiber.StatusOK, "Ticket review submitted successfully. Technician rating updated.", nil)
 }
+
+func (h *TicketHandler) Accept(c *fiber.Ctx) error {
+	id := c.Params("id")
+	techUserID, ok := c.Locals("userID").(string)
+	if !ok {
+		return exceptions.NewBadRequestError("Unauthorized", "UNAUTHORIZED")
+	}
+
+	err := h.service.AcceptTicket(c.UserContext(), id, techUserID)
+	if err != nil {
+		return err
+	}
+
+	return response.SendSuccess(c, fiber.StatusOK, "Ticket accepted successfully.", nil)
+}
+
+func (h *TicketHandler) Reject(c *fiber.Ctx) error {
+	id := c.Params("id")
+	techUserID, ok := c.Locals("userID").(string)
+	if !ok {
+		return exceptions.NewBadRequestError("Unauthorized", "UNAUTHORIZED")
+	}
+
+	err := h.service.RejectTicket(c.UserContext(), id, techUserID)
+	if err != nil {
+		return err
+	}
+
+	return response.SendSuccess(c, fiber.StatusOK, "Ticket rejected successfully.", nil)
+}
+
+func (h *TicketHandler) Transit(c *fiber.Ctx) error {
+	id := c.Params("id")
+	techUserID, ok := c.Locals("userID").(string)
+	if !ok {
+		return exceptions.NewBadRequestError("Unauthorized", "UNAUTHORIZED")
+	}
+
+	err := h.service.TransitTicket(c.UserContext(), id, techUserID)
+	if err != nil {
+		return err
+	}
+
+	return response.SendSuccess(c, fiber.StatusOK, "Ticket marked en route successfully.", nil)
+}
+
+func (h *TicketHandler) GetLogs(c *fiber.Ctx) error {
+	id := c.Params("id")
+	res, err := h.service.GetTimelineLogs(c.UserContext(), id)
+	if err != nil {
+		return err
+	}
+
+	return response.SendSuccess(c, fiber.StatusOK, "Ticket progress logs retrieved successfully.", res)
+}

@@ -6,23 +6,24 @@ import (
 	"fsm-backend/internal/domain"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type userRepository struct {
-	db *pgx.Conn
+	db *pgxpool.Pool
 }
 
-func NewUserRepository(db *pgx.Conn) domain.UserRepository {
+func NewUserRepository(db *pgxpool.Pool) domain.UserRepository {
 	return &userRepository{db: db}
 }
 
 func (r *userRepository) Create(ctx context.Context, u *domain.User) error {
 	query := `
-		INSERT INTO users (phone, email, password_hash, status, is_verified, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+		INSERT INTO users (phone, email, password_hash, status, is_verified, name, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
 		RETURNING id, created_at, updated_at
 	`
-	return r.db.QueryRow(ctx, query, u.Phone, u.Email, u.PasswordHash, u.Status, u.IsVerified).Scan(
+	return r.db.QueryRow(ctx, query, u.Phone, u.Email, u.PasswordHash, u.Status, u.IsVerified, u.Name).Scan(
 		&u.ID,
 		&u.CreatedAt,
 		&u.UpdatedAt,
@@ -31,7 +32,7 @@ func (r *userRepository) Create(ctx context.Context, u *domain.User) error {
 
 func (r *userRepository) GetByID(ctx context.Context, id string) (*domain.User, error) {
 	query := `
-		SELECT id, phone, email, status, is_verified, last_login_at, created_at, updated_at
+		SELECT id, phone, email, status, is_verified, name, last_login_at, created_at, updated_at
 		FROM users
 		WHERE id = $1 AND deleted_at IS NULL
 	`
@@ -42,6 +43,7 @@ func (r *userRepository) GetByID(ctx context.Context, id string) (*domain.User, 
 		&u.Email,
 		&u.Status,
 		&u.IsVerified,
+		&u.Name,
 		&u.LastLoginAt,
 		&u.CreatedAt,
 		&u.UpdatedAt,
@@ -57,7 +59,7 @@ func (r *userRepository) GetByID(ctx context.Context, id string) (*domain.User, 
 
 func (r *userRepository) GetByPhone(ctx context.Context, phone string) (*domain.User, error) {
 	query := `
-		SELECT id, phone, email, status, is_verified, last_login_at, created_at, updated_at
+		SELECT id, phone, email, status, is_verified, name, last_login_at, created_at, updated_at
 		FROM users
 		WHERE phone = $1 AND deleted_at IS NULL
 	`
@@ -68,6 +70,7 @@ func (r *userRepository) GetByPhone(ctx context.Context, phone string) (*domain.
 		&u.Email,
 		&u.Status,
 		&u.IsVerified,
+		&u.Name,
 		&u.LastLoginAt,
 		&u.CreatedAt,
 		&u.UpdatedAt,

@@ -37,6 +37,7 @@ func (h *TechnicianHandler) Register(c *fiber.Ctx) error {
 	user := domain.User{
 		Phone: req.Phone,
 		Email: req.Email,
+		Name:  req.Name,
 	}
 
 	res, err := h.service.RegisterTechnician(c.UserContext(), &user, req.Skills, req.ZoneAssignment, req.Latitude, req.Longitude)

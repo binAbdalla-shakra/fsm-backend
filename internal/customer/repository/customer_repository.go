@@ -6,13 +6,14 @@ import (
 	"fsm-backend/internal/domain"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type customerRepository struct {
-	db *pgx.Conn
+	db *pgxpool.Pool
 }
 
-func NewCustomerRepository(db *pgx.Conn) domain.CustomerRepository {
+func NewCustomerRepository(db *pgxpool.Pool) domain.CustomerRepository {
 	return &customerRepository{db: db}
 }
 
