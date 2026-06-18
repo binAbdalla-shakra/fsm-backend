@@ -24,9 +24,13 @@ func (h *AuthHandler) SignUp(c *fiber.Ctx) error {
 		return exceptions.NewBadRequestError(messages.ErrInvalidPayload, "INVALID_PAYLOAD")
 	}
 
-	// Capture device info headers
-	payload.DeviceID = c.Get("X-Device-ID", "default_device")
-	payload.DeviceName = c.Get("X-Device-Name", "Web Client")
+	// Capture device info headers if not set in body
+	if payload.DeviceID == "" {
+		payload.DeviceID = c.Get("X-Device-ID", "default_device")
+	}
+	if payload.DeviceName == "" {
+		payload.DeviceName = c.Get("X-Device-Name", "Unknown Device")
+	}
 
 	err := h.service.SignUpCustomer(c.UserContext(), &payload)
 	if err != nil {
@@ -56,8 +60,12 @@ func (h *AuthHandler) VerifyOTP(c *fiber.Ctx) error {
 		return exceptions.NewBadRequestError(messages.ErrInvalidPayload, "INVALID_PAYLOAD")
 	}
 
-	payload.DeviceID = c.Get("X-Device-ID", "default_device")
-	payload.DeviceName = c.Get("X-Device-Name", "Web Client")
+	if payload.DeviceID == "" {
+		payload.DeviceID = c.Get("X-Device-ID", "default_device")
+	}
+	if payload.DeviceName == "" {
+		payload.DeviceName = c.Get("X-Device-Name", "Unknown Device")
+	}
 	ipAddress := c.IP()
 
 	tokens, err := h.service.VerifyOTPAndLogin(c.UserContext(), &payload, ipAddress)
@@ -74,7 +82,9 @@ func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
 		return exceptions.NewBadRequestError(messages.ErrInvalidPayload, "INVALID_PAYLOAD")
 	}
 
-	payload.DeviceID = c.Get("X-Device-ID", "default_device")
+	if payload.DeviceID == "" {
+		payload.DeviceID = c.Get("X-Device-ID", "default_device")
+	}
 	ipAddress := c.IP()
 
 	tokens, err := h.service.RefreshSession(c.UserContext(), &payload, ipAddress)

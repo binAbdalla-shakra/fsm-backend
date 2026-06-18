@@ -32,7 +32,7 @@ func (r *technicianRepository) Create(ctx context.Context, t *domain.Technician)
 
 func (r *technicianRepository) GetByID(ctx context.Context, id string) (*domain.Technician, error) {
 	query := `
-		SELECT id, user_id, status, workload, skills, ST_Y(location) AS latitude, ST_X(location) AS longitude,
+		SELECT id, user_id, status, workload, skills, COALESCE(ST_Y(location), 0) AS latitude, COALESCE(ST_X(location), 0) AS longitude,
 		       zone_assignment, rating, tasks_completed, created_at, updated_at
 		FROM technicians
 		WHERE id = $1 AND deleted_at IS NULL
@@ -63,7 +63,7 @@ func (r *technicianRepository) GetByID(ctx context.Context, id string) (*domain.
 
 func (r *technicianRepository) GetByUserID(ctx context.Context, userID string) (*domain.Technician, error) {
 	query := `
-		SELECT id, user_id, status, workload, skills, ST_Y(location) AS latitude, ST_X(location) AS longitude,
+		SELECT id, user_id, status, workload, skills, COALESCE(ST_Y(location), 0) AS latitude, COALESCE(ST_X(location), 0) AS longitude,
 		       zone_assignment, rating, tasks_completed, created_at, updated_at
 		FROM technicians
 		WHERE user_id = $1 AND deleted_at IS NULL
@@ -121,11 +121,12 @@ func (r *technicianRepository) FindNearestMatching(ctx context.Context, lon floa
 	}
 
 	query := `
-		SELECT id, user_id, status, workload, skills, ST_Y(location) AS latitude, ST_X(location) AS longitude,
+		SELECT id, user_id, status, workload, skills, COALESCE(ST_Y(location), 0) AS latitude, COALESCE(ST_X(location), 0) AS longitude,
 		       zone_assignment, rating, tasks_completed, created_at, updated_at,
-		       ST_DistanceSphere(location, ST_SetSRID(ST_MakePoint($1, $2), 4326)) AS distance_meters
+		       COALESCE(ST_DistanceSphere(location, ST_SetSRID(ST_MakePoint($1, $2), 4326)), 0) AS distance_meters
 		FROM technicians
 		WHERE status = 'ONLINE'
+		  AND location IS NOT NULL
 		  AND NOT (id = ANY($4))
 	`
 	if !allowBusy {

@@ -9,6 +9,7 @@ import (
 	"fsm-backend/internal/auth/dto"
 	"fsm-backend/internal/domain"
 	"fsm-backend/pkg/jwt"
+	"strings"
 	"time"
 )
 
@@ -109,6 +110,22 @@ func (s *authService) VerifyOTPAndLogin(ctx context.Context, req *dto.VerifyOTPP
 
 	// Fetch roles and permissions
 	roles, _ := s.userRepo.GetUserRoles(ctx, user.ID)
+
+	// If logging in from the portal, restrict access to Admin, Dispatcher, or Super Admin
+	isPortalLogin := req.DeviceID == "web_client_default" || strings.Contains(strings.ToLower(req.DeviceName), "web")
+	if isPortalLogin {
+		hasPortalAccess := false
+		for _, role := range roles {
+			if role == "Admin" || role == "Dispatcher" || role == "Super Admin" {
+				hasPortalAccess = true
+				break
+			}
+		}
+		if !hasPortalAccess {
+			return nil, exceptions.NewBadRequestError("Access Denied: Only Admin, Dispatcher, or Super Admin roles are allowed to access the portal.", "UNAUTHORIZED_PORTAL_ACCESS")
+		}
+	}
+
 	permissions, _ := s.userRepo.GetUserPermissions(ctx, user.ID)
 
 	primaryRole := "CUSTOMER"

@@ -9,6 +9,7 @@ const (
 	SuccessTechStatusUpdated = "Technician status and online status updated successfully."
 	SuccessCustomerCreated   = "Customer profile created successfully."
 	SuccessTechCreated       = "Technician profile registered successfully."
+	SuccessTicketCancelled   = "Ticket cancelled successfully."
 )
 
 // Standard error messages

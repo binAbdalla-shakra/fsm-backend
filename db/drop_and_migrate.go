@@ -163,5 +163,37 @@ func seedRolesAndPermissions(ctx context.Context, conn *pgx.Conn) error {
 		}
 	}
 
+	// Seed a default Admin User for testing
+	var adminUserID string
+	err = tx.QueryRow(ctx, `
+		INSERT INTO users (phone, email, name, status, is_verified)
+		VALUES ('+252617770300', 'admin@fsm.com', 'FSM Admin', 'ACTIVE', TRUE)
+		ON CONFLICT (phone) DO UPDATE SET status = 'ACTIVE'
+		RETURNING id`,
+	).Scan(&adminUserID)
+	if err != nil {
+		// If already exists, select the ID
+		err = tx.QueryRow(ctx, "SELECT id FROM users WHERE phone = '+252617770300'").Scan(&adminUserID)
+		if err != nil {
+			return fmt.Errorf("failed to find or create default admin user: %w", err)
+		}
+	}
+
+	var adminRoleID string
+	err = tx.QueryRow(ctx, "SELECT id FROM roles WHERE name = 'Admin' LIMIT 1").Scan(&adminRoleID)
+	if err != nil {
+		return fmt.Errorf("failed to find Admin role: %w", err)
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO user_roles (user_id, role_id)
+		VALUES ($1, $2)
+		ON CONFLICT DO NOTHING`,
+		adminUserID, adminRoleID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to link admin user to Admin role: %w", err)
+	}
+
 	return tx.Commit(ctx)
 }

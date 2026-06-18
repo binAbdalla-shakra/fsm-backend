@@ -20,6 +20,7 @@ import (
 	trackRepo "fsm-backend/internal/tracking/repository"
 	trackService "fsm-backend/internal/tracking/service"
 	userRepo "fsm-backend/internal/user/repository"
+	portalHandler "fsm-backend/internal/portal/handler"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -34,6 +35,8 @@ type AppDependencies struct {
 	TechnicianHandler *techHandler.TechnicianHandler
 	TicketHandler     *ticketHandler.TicketHandler
 	TrackingHandler   *trackHandler.TrackingHandler
+	PortalHandler     *portalHandler.PortalHandler
+	DbPool            *pgxpool.Pool
 }
 
 // InitializeDependencies resolves repository, service, and handler layers.
@@ -72,6 +75,7 @@ func InitializeDependencies(pgConn *pgxpool.Pool, rdb *redis.Client) *AppDepende
 	tHand := techHandler.NewTechnicianHandler(tService)
 	tktHand := ticketHandler.NewTicketHandler(tktService)
 	trHand := trackHandler.NewTrackingHandler(trService)
+	portalHand := portalHandler.NewPortalHandler(pgConn)
 
 	return &AppDependencies{
 		Config:            cfg,
@@ -81,5 +85,7 @@ func InitializeDependencies(pgConn *pgxpool.Pool, rdb *redis.Client) *AppDepende
 		TechnicianHandler: tHand,
 		TicketHandler:     tktHand,
 		TrackingHandler:   trHand,
+		PortalHandler:     portalHand,
+		DbPool:            pgConn,
 	}
 }
